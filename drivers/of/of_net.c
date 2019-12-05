@@ -39,6 +39,32 @@ int of_get_phy_mode(struct device_node *np)
 }
 EXPORT_SYMBOL_GPL(of_get_phy_mode);
 
+/**
+ * of_get_mac_mode - Get phy mode of the MAC for given device_node
+ * @np:	Pointer to the given device_node
+ *
+ * Similar to `of_get_phy_mode()`, this function will retrieve (from
+ * the device-tree) the interface mode on the MAC side. This assumes
+ * that there is mode converter in-between the MAC & PHY
+ * (e.g. GMII-to-RGMII).
+ */
+int of_get_mac_mode(struct device_node *np)
+{
+	const char *pm;
+	int err, i;
+
+	err = of_property_read_string(np, "mac-mode", &pm);
+	if (err < 0)
+		return err;
+
+	for (i = 0; i < PHY_INTERFACE_MODE_MAX; i++)
+		if (!strcasecmp(pm, phy_modes(i)))
+			return i;
+
+	return -ENODEV;
+}
+EXPORT_SYMBOL_GPL(of_get_mac_mode);
+
 static const void *of_get_mac_addr(struct device_node *np, const char *name)
 {
 	struct property *pp = of_find_property(np, name, NULL);
