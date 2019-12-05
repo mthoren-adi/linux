@@ -2393,7 +2393,7 @@ static void macb_init_hw(struct macb *bp)
 	macb_set_hwaddr(bp);
 
 	config = macb_mdc_clk_div(bp);
-	if (bp->phy_interface == PHY_INTERFACE_MODE_SGMII)
+	if (bp->mac_interface == PHY_INTERFACE_MODE_SGMII)
 		config |= GEM_BIT(SGMIIEN) | GEM_BIT(PCSSEL);
 	config |= MACB_BF(RBOF, NET_IP_ALIGN);	/* Make eth data aligned */
 	config |= MACB_BIT(PAE);		/* PAuse Enable */
@@ -2455,7 +2455,7 @@ static void macb_init_hw(struct macb *bp)
 			     MACB_BIT(HRESP));
 	}
 
-	if ((bp->phy_interface == PHY_INTERFACE_MODE_SGMII) &&
+	if ((bp->mac_interface == PHY_INTERFACE_MODE_SGMII) &&
 	    (bp->caps & MACB_CAPS_PCS))
 		gem_writel(bp, PCSCNTRL,
 			   gem_readl(bp, PCSCNTRL) | GEM_BIT(PCSAUTONEG));
@@ -3708,9 +3708,9 @@ static int macb_init(struct platform_device *pdev)
 
 	if (!(bp->caps & MACB_CAPS_USRIO_DISABLED)) {
 		val = 0;
-		if (bp->phy_interface == PHY_INTERFACE_MODE_RGMII)
+		if (bp->mac_interface == PHY_INTERFACE_MODE_RGMII)
 			val = GEM_BIT(RGMII);
-		else if (bp->phy_interface == PHY_INTERFACE_MODE_RMII &&
+		else if (bp->mac_interface == PHY_INTERFACE_MODE_RMII &&
 			 (bp->caps & MACB_CAPS_USRIO_DEFAULT_IS_MII_GMII))
 			val = MACB_BIT(RMII);
 		else if (!(bp->caps & MACB_CAPS_USRIO_DEFAULT_IS_MII_GMII))
@@ -3725,11 +3725,11 @@ static int macb_init(struct platform_device *pdev)
 	/* Set MII management clock divider */
 	val = macb_mdc_clk_div(bp);
 	val |= macb_dbw(bp);
-	if (bp->phy_interface == PHY_INTERFACE_MODE_SGMII)
+	if (bp->mac_interface == PHY_INTERFACE_MODE_SGMII)
 		val |= GEM_BIT(SGMIIEN) | GEM_BIT(PCSSEL);
 	macb_writel(bp, NCFGR, val);
 
-	if ((bp->phy_interface == PHY_INTERFACE_MODE_SGMII) &&
+	if ((bp->mac_interface == PHY_INTERFACE_MODE_SGMII) &&
 	    (bp->caps & MACB_CAPS_PCS))
 		gem_writel(bp, PCSCNTRL,
 			   gem_readl(bp, PCSCNTRL) | GEM_BIT(PCSAUTONEG));
@@ -4062,7 +4062,7 @@ static int at91ether_init(struct platform_device *pdev)
 	macb_writel(bp, NCR, 0);
 
 	reg = MACB_BF(CLK, MACB_CLK_DIV32) | MACB_BIT(BIG);
-	if (bp->phy_interface == PHY_INTERFACE_MODE_RMII)
+	if (bp->mac_interface == PHY_INTERFACE_MODE_RMII)
 		reg |= MACB_BIT(RM9200_RMII);
 
 	macb_writel(bp, NCFGR, reg);
@@ -4335,8 +4335,13 @@ static int macb_probe(struct platform_device *pdev)
 			bp->phy_interface = PHY_INTERFACE_MODE_RMII;
 		else
 			bp->phy_interface = PHY_INTERFACE_MODE_MII;
+		bp->mac_interface = bp->phy_interface;
 	} else {
 		bp->phy_interface = err;
+
+		err = of_get_mac_mode(np);
+		if (err < 0)
+			bp->mac_interface = bp->phy_interface;
 	}
 
 	/* IP specific init */

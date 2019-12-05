@@ -1209,6 +1209,7 @@ struct macb {
 	u32			caps;
 	unsigned int		dma_burst_length;
 
+	phy_interface_t		mac_interface;
 	phy_interface_t		phy_interface;
 
 	/* AT91RM9200 transmit */
