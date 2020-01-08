@@ -1,0 +1,20 @@
+/dts-v1/;
+
+#include "zynq-zc706.dtsi"
+#include "zynq-zc706-adv7511.dtsi"
+
+&gem1 {
+	status = "okay";
+	phy-mode = "mii";
+	phy-handle = <&ethernet_gem1_phy0>;
+	/* Override compatible string to configure a MAC that works
+	 * at 100 Mbit. Otherwise gigabit can be advertised by the
+	 * PHY after matching MAC link caps with PHY link caps,
+	 * even though, the design won't be able to actually support it
+	 */
+	compatible = "cdns,macb";
+
+	ethernet_gem1_phy0: ethernet-phy@0 {
+		reg = <0>;
+	};
+};
