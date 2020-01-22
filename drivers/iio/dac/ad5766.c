@@ -16,6 +16,7 @@
 #include <linux/spi/spi.h>
 #include <linux/slab.h>
 #include <linux/sysfs.h>
+#include <linux/types.h>
 
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
@@ -24,8 +25,8 @@
 #define AD5766_CMD_SDO_CNTRL			0x01
 #define AD5766_CMD_WR_IN_REG(x)			(0x10 | ((x) & 0xF))
 #define AD5766_CMD_WR_DAC_REG(x)		(0x20 | ((x) & 0xF))
-#define AD5766_CMD_SW_LDAC			0x30
-#define AD5766_CMD_SPAN_REG			0x40
+#define AD5766_CMD_SW_LDAC				0x30
+#define AD5766_CMD_SPAN_REG				0x40
 #define AD5766_CMD_WR_PWR_DITHER		0x51
 #define AD5766_CMD_WR_DAC_REG_ALL		0x60
 #define AD5766_CMD_SW_FULL_RESET		0x70
@@ -38,37 +39,37 @@
 
 #define AD5766_FULL_RESET_CODE			0x1234
 
-#define AD5766_CHANNEL(_chan, _bits) {				\
-	.type = IIO_VOLTAGE,					\
-	.indexed = 1,						\
-	.output = 1,						\
-	.channel = (_chan),					\
-	.address = (_chan),					\
-	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW) |		\
-		BIT(IIO_CHAN_INFO_SCALE) |			\
-		BIT(IIO_CHAN_INFO_CALIBSCALE) |			\
-		BIT(IIO_CHAN_INFO_CALIBBIAS),			\
+#define AD5766_CHANNEL(_chan, _bits) {						\
+	.type = IIO_VOLTAGE,									\
+	.indexed = 1,											\
+	.output = 1,											\
+	.channel = (_chan),										\
+	.address = (_chan),										\
+	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW) |			\
+		BIT(IIO_CHAN_INFO_SCALE) |							\
+		BIT(IIO_CHAN_INFO_CALIBSCALE) |						\
+		BIT(IIO_CHAN_INFO_CALIBBIAS),						\
 	.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_OFFSET),	\
-	.scan_type = {						\
-		.sign = 'u',					\
-		.realbits = (_bits),				\
-		.storagebits = 16,				\
-		.shift = 16 - (_bits),				\
-	},							\
+	.scan_type = {											\
+		.sign = 'u',										\
+		.realbits = (_bits),								\
+		.storagebits = 16,									\
+		.shift = 16 - (_bits),								\
+	},														\
 }
 
-#define DECLARE_AD5766_CHANNELS(_name, _bits)			\
-const struct iio_chan_spec _name[] = {				\
-	AD5766_CHANNEL(0, (_bits)),				\
-	AD5766_CHANNEL(1, (_bits)),				\
-	AD5766_CHANNEL(2, (_bits)),				\
-	AD5766_CHANNEL(3, (_bits)),				\
-	AD5766_CHANNEL(4, (_bits)),				\
-	AD5766_CHANNEL(5, (_bits)),				\
-	AD5766_CHANNEL(6, (_bits)),				\
-	AD5766_CHANNEL(7, (_bits)),				\
-	AD5766_CHANNEL(8, (_bits)),				\
-	AD5766_CHANNEL(9, (_bits)),				\
+#define DECLARE_AD5766_CHANNELS(_name, _bits)	\
+const struct iio_chan_spec _name[] = {			\
+	AD5766_CHANNEL(0, (_bits)),					\
+	AD5766_CHANNEL(1, (_bits)),					\
+	AD5766_CHANNEL(2, (_bits)),					\
+	AD5766_CHANNEL(3, (_bits)),					\
+	AD5766_CHANNEL(4, (_bits)),					\
+	AD5766_CHANNEL(5, (_bits)),					\
+	AD5766_CHANNEL(6, (_bits)),					\
+	AD5766_CHANNEL(7, (_bits)),					\
+	AD5766_CHANNEL(8, (_bits)),					\
+	AD5766_CHANNEL(9, (_bits)),					\
 	AD5766_CHANNEL(10, (_bits)),				\
 	AD5766_CHANNEL(11, (_bits)),				\
 	AD5766_CHANNEL(12, (_bits)),				\
@@ -77,18 +78,18 @@ const struct iio_chan_spec _name[] = {				\
 	AD5766_CHANNEL(15, (_bits)),				\
 };
 
-#define DECLARE_AD5767_CHANNELS(_name, _bits)			\
-const struct iio_chan_spec _name[] = {				\
-	AD5766_CHANNEL(0, (_bits)),				\
-	AD5766_CHANNEL(1, (_bits)),				\
-	AD5766_CHANNEL(2, (_bits)),				\
-	AD5766_CHANNEL(3, (_bits)),				\
-	AD5766_CHANNEL(4, (_bits)),				\
-	AD5766_CHANNEL(5, (_bits)),				\
-	AD5766_CHANNEL(6, (_bits)),				\
-	AD5766_CHANNEL(7, (_bits)),				\
-	AD5766_CHANNEL(8, (_bits)),				\
-	AD5766_CHANNEL(9, (_bits)),				\
+#define DECLARE_AD5767_CHANNELS(_name, _bits)	\
+const struct iio_chan_spec _name[] = {			\
+	AD5766_CHANNEL(0, (_bits)),					\
+	AD5766_CHANNEL(1, (_bits)),					\
+	AD5766_CHANNEL(2, (_bits)),					\
+	AD5766_CHANNEL(3, (_bits)),					\
+	AD5766_CHANNEL(4, (_bits)),					\
+	AD5766_CHANNEL(5, (_bits)),					\
+	AD5766_CHANNEL(6, (_bits)),					\
+	AD5766_CHANNEL(7, (_bits)),					\
+	AD5766_CHANNEL(8, (_bits)),					\
+	AD5766_CHANNEL(9, (_bits)),					\
 	AD5766_CHANNEL(10, (_bits)),				\
 	AD5766_CHANNEL(11, (_bits)),				\
 };
@@ -119,9 +120,9 @@ enum ad5766_type {
 
 /**
  * struct ad5766_chip_info - chip specific information
- * @int_vref:	        Value of the internal reference voltage in uV
- * @num_channels:	number of channels
- * @channel	        channel specification
+ * @int_vref:		Value of the internal reference voltage in uV
+ * @num_channels:	Number of channels
+ * @channel:		Channel specification
  */
 
 struct ad5766_chip_info {
@@ -132,35 +133,35 @@ struct ad5766_chip_info {
 
 /**
  * struct ad5766_state - driver instance specific data
- * @lock:	mutex lock
- * @spi:		spi_device
- * @chip_info:          chip model specific constants, available modes, etc.
- * @data:		spi transfer buffers
+ * @lock:			Mutex lock
+ * @spi:			Spi_device
+ * @chip_info:		Chip model specific constants, available modes, etc.
+ * @data:			Spi transfer buffers
  */
 
 struct ad5766_state {
-	struct mutex lock;
-	struct spi_device *spi;
-	const struct ad5766_chip_info *chip_info;
+	struct mutex					lock;
+	struct spi_device				*spi;
+	const struct ad5766_chip_info	*chip_info;
 
 	union {
-		__be32 d32;
-		__be16 d16[2];
-		__u8 d8[4];
+		u32	d32;
+		u16	w16[2];
+		u8	b8[4];
 	} data[3] ____cacheline_aligned;
 };
 
 static int ad5766_write_raw(struct iio_dev *indio_dev,
-			    struct iio_chan_spec const *chan,
-			    int val,
-			    int val2,
-			    long info);
+			    			struct iio_chan_spec const *chan,
+			    			int val,
+			    			int val2,
+			    			long info);
 
 static int ad5766_read_raw(struct iio_dev *indio_dev,
-			   struct iio_chan_spec const *chan,
-			   int *val,
-			   int *val2,
-			   long m);
+			   			   struct iio_chan_spec const *chan,
+			   			   int *val,
+			   			   int *val2,
+			   			   long m);
 
 static DECLARE_AD5766_CHANNELS(ad5766_channels, 16);
 static DECLARE_AD5767_CHANNELS(ad5767_channels, 12);
@@ -184,19 +185,19 @@ static const struct iio_info ad5766_info = {
 };
 
 static int _ad5766_spi_write(struct ad5766_state *st,
-			     enum ad5766_dac dac,
-			     __u16 data)
+							 enum ad5766_dac dac,
+							 u16 data)
 {
-	st->data[0].d8[0] = AD5766_CMD_WR_DAC_REG(dac);
-	st->data[0].d8[1] = (data & 0xFF00) >> 8;
-	st->data[0].d8[2] = (data & 0x00FF) >> 0;
+	st->data[0].b8[0] = dac;
+	st->data[0].b8[1] = (data & 0xFF00) >> 8;
+	st->data[0].b8[2] = (data & 0x00FF) >> 0;
 
-	return spi_write(st->spi, &st->data[0].d8[0], 3);
+	return spi_write(st->spi, &st->data[0].b8[0], 3);
 }
 
 static int ad5766_write(struct iio_dev *indio_dev,
-			    enum ad5766_dac dac,
-			    __u16 data)
+						enum ad5766_dac dac,
+						u16 data)
 {
 	struct ad5766_state *st = iio_priv(indio_dev);
 	int ret;
@@ -239,7 +240,7 @@ static int ad5766_write_raw(struct iio_dev *indio_dev,
 
 static int _ad5766_spi_read(struct ad5766_state *st,
 			    enum ad5766_dac dac,
-			    __u16 *val)
+			    u16 *val)
 {
 	int ret;
 	struct spi_transfer xfers[] = {
@@ -261,14 +262,17 @@ static int _ad5766_spi_read(struct ad5766_state *st,
 
 	ret = spi_sync_transfer(st->spi, xfers, ARRAY_SIZE(xfers));
 
-	*val = be32_to_cpu(st->data[2].d32);
+	if (ret)
+		return ret;
+
+	*val = st->data[2].w16[1];
 
 	return ret;
 }
 
 static int ad5766_read(struct iio_dev *indio_dev,
-			   enum ad5766_dac dac,
-			   __u16 *val)
+		       		   enum ad5766_dac dac,
+		       		   u16 *val)
 {
 	struct ad5766_state *st = iio_priv(indio_dev);
 	int ret;
@@ -337,7 +341,7 @@ MODULE_DEVICE_TABLE(of, ad5766_dt_match);
 static const struct spi_device_id ad5766_spi_ids[] = {
 	{ "ad5766", ID_AD5766 },
 	{ "ad5767", ID_AD5767 },
-	{}
+	{},
 };
 MODULE_DEVICE_TABLE(spi, ad5766_spi_ids);
 
