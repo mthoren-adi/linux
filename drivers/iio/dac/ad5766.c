@@ -16,7 +16,6 @@
 #include <linux/spi/spi.h>
 #include <linux/slab.h>
 #include <linux/sysfs.h>
-#include <linux/types.h>
 
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
@@ -46,9 +45,7 @@
 	.channel = (_chan),										\
 	.address = (_chan),										\
 	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW) |			\
-		BIT(IIO_CHAN_INFO_SCALE) |							\
-		BIT(IIO_CHAN_INFO_CALIBSCALE) |						\
-		BIT(IIO_CHAN_INFO_CALIBBIAS),						\
+		BIT(IIO_CHAN_INFO_SCALE),							\
 	.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_OFFSET),	\
 	.scan_type = {											\
 		.sign = 'u',										\
@@ -126,8 +123,8 @@ enum ad5766_type {
  */
 
 struct ad5766_chip_info {
-	unsigned long			int_vref;
-	unsigned int			num_channels;
+	unsigned long				int_vref;
+	unsigned int				num_channels;
 	const struct iio_chan_spec	*channels;
 };
 
@@ -184,11 +181,17 @@ static const struct iio_info ad5766_info = {
 	.write_raw = ad5766_write_raw,
 };
 
+static void _ad5766_get_span_range(int *min, int *max)
+{
+	*min = -5;
+	*max = 5;
+}
+
 static int _ad5766_spi_write(struct ad5766_state *st,
-							 enum ad5766_dac dac,
+							 u8 command,
 							 u16 data)
 {
-	st->data[0].b8[0] = dac;
+	st->data[0].b8[0] = command;
 	st->data[0].b8[1] = (data & 0xFF00) >> 8;
 	st->data[0].b8[2] = (data & 0x00FF) >> 0;
 
@@ -222,25 +225,17 @@ static int ad5766_write_raw(struct iio_dev *indio_dev,
 		if (val >= max_val || val < 0)
 			return -EINVAL;
 		val <<= chan->scan_type.shift;
-		break;
-	case IIO_CHAN_INFO_CALIBBIAS:
-		if (val >= 128 || val < -128)
-			return -EINVAL;
-		break;
-	case IIO_CHAN_INFO_CALIBSCALE:
-		if (val >= 32 || val < -32)
-			return -EINVAL;
-		break;
+
+		return ad5766_write(indio_dev, chan->address, val);
+
 	default:
 		return -EINVAL;
 	}
-
-	return ad5766_write(indio_dev, chan->address, (__u16)val);
 }
 
 static int _ad5766_spi_read(struct ad5766_state *st,
 			    enum ad5766_dac dac,
-			    u16 *val)
+			    int *val)
 {
 	int ret;
 	struct spi_transfer xfers[] = {
@@ -265,14 +260,14 @@ static int _ad5766_spi_read(struct ad5766_state *st,
 	if (ret)
 		return ret;
 
-	*val = st->data[2].w16[1];
+	*val = (int)st->data[2].w16[1];
 
 	return ret;
 }
 
 static int ad5766_read(struct iio_dev *indio_dev,
 		       		   enum ad5766_dac dac,
-		       		   u16 *val)
+		       		   int *val)
 {
 	struct ad5766_state *st = iio_priv(indio_dev);
 	int ret;
@@ -293,12 +288,28 @@ static int ad5766_read_raw(struct iio_dev *indio_dev,
 	int ret;
 
 	switch (m) {
-	case IIO_CHAN_INFO_RAW:
-		ret = ad5766_read(indio_dev, chan->address, (__u16 *)val);
-		if (ret < 0)
-			return ret;
-		*val >>= chan->scan_type.shift;
-		return IIO_VAL_INT;
+		int min, max;
+
+		case IIO_CHAN_INFO_RAW:
+			ret = ad5766_read(indio_dev, chan->address, val);
+
+			if (ret < 0)
+				return ret;
+
+			return IIO_VAL_INT;
+
+		case IIO_CHAN_INFO_SCALE:
+			_ad5766_get_span_range(&min, &max);
+			*val = max - min;
+			*val2 = indio_dev->num_channels;
+
+			return IIO_VAL_FRACTIONAL_LOG2;
+
+		case IIO_CHAN_INFO_OFFSET:
+			_ad5766_get_span_range(&min, &max);
+			*val = min;
+
+			return IIO_VAL_INT;
 	}
 	return -EINVAL;
 }
