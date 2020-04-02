@@ -38,6 +38,9 @@
 /* IDA to assign each registered device a unique id */
 static DEFINE_IDA(iio_ida);
 
+/* IDA to assign each registered character device a unique id */
+static DEFINE_IDA(iio_chrdev_ida);
+
 static dev_t iio_devt;
 
 #define IIO_DEV_MAX 256
@@ -1650,15 +1653,6 @@ static long iio_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	return -EINVAL;
 }
 
-static const struct file_operations iio_buffer_none_fileops = {
-	.release = iio_chrdev_release,
-	.open = iio_chrdev_open,
-	.owner = THIS_MODULE,
-	.llseek = noop_llseek,
-	.unlocked_ioctl = iio_ioctl,
-	.compat_ioctl = iio_ioctl,
-};
-
 static const struct file_operations iio_buffer_in_fileops = {
 	.read = iio_buffer_read_outer_addr,
 	.release = iio_chrdev_release,
@@ -1707,6 +1701,29 @@ static int iio_check_unique_scan_index(struct iio_dev *indio_dev)
 	return 0;
 }
 
+static int iio_device_alloc_chrdev_id(struct device *dev)
+{
+	int id;
+
+	id = ida_simple_get(&iio_chrdev_ida, 0, 0, GFP_KERNEL);
+	if (id < 0) {
+		/* cannot use a dev_err as the name isn't available */
+		dev_err(dev, "failed to get device id\n");
+		return id;
+	}
+
+	dev->devt = MKDEV(MAJOR(iio_devt), id);
+
+	return 0;
+}
+
+static void iio_device_free_chrdev_id(struct device *dev)
+{
+	if (!dev->devt)
+		return;
+	ida_simple_remove(&iio_chrdev_ida, MINOR(dev->devt));
+}
+
 static const struct iio_buffer_setup_ops noop_ring_setup_ops;
 
 static const struct file_operations iio_buffer_out_fileops = {
@@ -1721,9 +1738,17 @@ static const struct file_operations iio_buffer_out_fileops = {
 	.mmap = iio_buffer_mmap,
 };
 
+static const struct file_operations iio_event_fileops = {
+	.owner = THIS_MODULE,
+	.llseek = noop_llseek,
+	.unlocked_ioctl = iio_ioctl,
+	.compat_ioctl = iio_ioctl,
+	.open = iio_chrdev_open,
+	.release = iio_chrdev_release,
+};
+
 int __iio_device_register(struct iio_dev *indio_dev, struct module *this_mod)
 {
-	const struct file_operations *fops;
 	int ret;
 
 	if (!indio_dev->info)
@@ -1740,9 +1765,6 @@ int __iio_device_register(struct iio_dev *indio_dev, struct module *this_mod)
 	ret = iio_check_unique_scan_index(indio_dev);
 	if (ret < 0)
 		return ret;
-
-	/* configure elements for the chrdev */
-	indio_dev->dev.devt = MKDEV(MAJOR(iio_devt), indio_dev->id);
 
 	iio_device_register_debugfs(indio_dev);
 
@@ -1774,23 +1796,29 @@ int __iio_device_register(struct iio_dev *indio_dev, struct module *this_mod)
 
 	if (indio_dev->buffer) {
 		if (indio_dev->direction == IIO_DEVICE_DIRECTION_IN)
-			fops = &iio_buffer_in_fileops;
+			cdev_init(&indio_dev->chrdev, &iio_buffer_in_fileops);
 		else
-			fops = &iio_buffer_out_fileops;
-	} else {
-		fops = &iio_buffer_none_fileops;
+			cdev_init(&indio_dev->chrdev, &iio_buffer_out_fileops);
+	} else if (indio_dev->event_interface) {
+		cdev_init(&indio_dev->chrdev, &iio_event_fileops);
 	}
 
-	cdev_init(&indio_dev->chrdev, fops);
+	if (indio_dev->buffer || indio_dev->event_interface) {
+		indio_dev->chrdev.owner = this_mod;
 
-	indio_dev->chrdev.owner = this_mod;
+		ret = iio_device_alloc_chrdev_id(&indio_dev->dev);
+		if (ret)
+			goto error_unreg_eventset;
+	}
 
 	ret = cdev_device_add(&indio_dev->chrdev, &indio_dev->dev);
-	if (ret < 0)
-		goto error_unreg_eventset;
+	if (ret)
+		goto error_free_chrdev_id;
 
 	return 0;
 
+error_free_chrdev_id:
+	iio_device_free_chrdev_id(&indio_dev->dev);
 error_unreg_eventset:
 	iio_device_unregister_eventset(indio_dev);
 error_free_sysfs:
@@ -1810,6 +1838,7 @@ EXPORT_SYMBOL(__iio_device_register);
 void iio_device_unregister(struct iio_dev *indio_dev)
 {
 	cdev_device_del(&indio_dev->chrdev, &indio_dev->dev);
+	iio_device_free_chrdev_id(&indio_dev->dev);
 
 	mutex_lock(&indio_dev->info_exist_lock);
 
