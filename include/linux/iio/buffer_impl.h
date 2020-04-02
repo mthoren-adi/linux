@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 #ifndef _IIO_BUFFER_GENERIC_IMPL_H_
 #define _IIO_BUFFER_GENERIC_IMPL_H_
+#include <linux/cdev.h>
 #include <linux/sysfs.h>
 #include <linux/kref.h>
 
@@ -115,6 +116,12 @@ struct iio_buffer_access_funcs {
 struct iio_buffer {
 	/** @indio_dev: IIO device to which this buffer belongs to. */
 	struct iio_dev *indio_dev;
+
+	/** @chrdev: associated character device. */
+	struct cdev chrdev;
+
+	/** @file_ops_flags: file ops related flags including busy flag. */
+	unsigned long file_ops_flags;
 
 	/** @length: Number of datums in buffer. */
 	unsigned int length;

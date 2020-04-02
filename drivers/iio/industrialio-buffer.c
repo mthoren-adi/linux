@@ -107,11 +107,11 @@ static bool iio_buffer_ready(struct iio_dev *indio_dev, struct iio_buffer *buf,
  * Return: negative values corresponding to error codes or ret != 0
  *	   for ending the reading activity
  **/
-ssize_t iio_buffer_read_outer(struct file *filp, char __user *buf,
-			      size_t n, loff_t *f_ps)
+static ssize_t iio_buffer_read_outer(struct file *filp, char __user *buf,
+				     size_t n, loff_t *f_ps)
 {
-	struct iio_dev *indio_dev = filp->private_data;
-	struct iio_buffer *rb = indio_dev->buffer;
+	struct iio_buffer *rb = filp->private_data;
+	struct iio_dev *indio_dev = rb->indio_dev;
 	DEFINE_WAIT_FUNC(wait, woken_wake_function);
 	size_t datum_size;
 	size_t to_wait;
@@ -175,8 +175,8 @@ static bool iio_buffer_space_available(struct iio_buffer *buf)
 ssize_t iio_buffer_chrdev_write(struct file *filp, const char __user *buf,
 				      size_t n, loff_t *f_ps)
 {
-	struct iio_dev *indio_dev = filp->private_data;
-	struct iio_buffer *rb = indio_dev->buffer;
+	struct iio_buffer *rb = filp->private_data;
+	struct iio_dev *indio_dev = rb->indio_dev;
 	int ret;
 
 	if (!rb || !rb->access->write)
@@ -213,11 +213,11 @@ ssize_t iio_buffer_chrdev_write(struct file *filp, const char __user *buf,
  * Return: (EPOLLIN | EPOLLRDNORM) if data is available for reading
  *	   or 0 for other cases
  */
-__poll_t iio_buffer_poll(struct file *filp,
+static __poll_t iio_buffer_poll(struct file *filp,
 			     struct poll_table_struct *wait)
 {
-	struct iio_dev *indio_dev = filp->private_data;
-	struct iio_buffer *rb = indio_dev->buffer;
+	struct iio_buffer *rb = filp->private_data;
+	struct iio_dev *indio_dev = rb->indio_dev;
 
 	if (!indio_dev->info || rb == NULL)
 		return 0;
@@ -235,6 +235,56 @@ __poll_t iio_buffer_poll(struct file *filp,
 	}
 
 	/* need a way of knowing if there may be enough data... */
+	return 0;
+}
+
+/**
+ * iio_buffer_chrdev_open() - chrdev file open for buffer access
+ * @inode:	Inode structure for identifying the device in the file system
+ * @filp:	File structure for iio device used to keep and later access
+ *		private data
+ *
+ * Return: 0 on success or -EBUSY if the device is already opened
+ **/
+static int iio_buffer_chrdev_open(struct inode *inode, struct file *filp)
+{
+	struct iio_buffer *buffer = container_of(inode->i_cdev,
+						 struct iio_buffer, chrdev);
+
+	if (test_and_set_bit(IIO_BUSY_BIT_POS, &buffer->file_ops_flags))
+		return -EBUSY;
+
+	iio_buffer_get(buffer);
+
+	filp->private_data = buffer;
+
+	return 0;
+}
+
+void iio_buffer_free_blocks(struct iio_buffer *buffer)
+{
+	if (buffer->access->free_blocks)
+		buffer->access->free_blocks(buffer);
+}
+
+/**
+ * iio_buffer_chrdev_release() - chrdev file close for buffer access
+ * @inode:	Inode structure pointer for the char device
+ * @filp:	File structure pointer for the char device
+ *
+ * Return: 0 for successful release
+ */
+static int iio_buffer_chrdev_release(struct inode *inode, struct file *filp)
+{
+	struct iio_buffer *buffer = container_of(inode->i_cdev,
+						 struct iio_buffer, chrdev);
+
+	iio_buffer_free_blocks(buffer);
+
+	clear_bit(IIO_BUSY_BIT_POS, &buffer->file_ops_flags);
+
+	iio_buffer_put(buffer);
+
 	return 0;
 }
 
@@ -1331,20 +1381,17 @@ static int iio_buffer_alloc_blocks(struct iio_buffer *buffer,
 	return 0;
 }
 
-void iio_buffer_free_blocks(struct iio_buffer *buffer)
+static long iio_buffer_ioctl(struct file *filep, unsigned int cmd,
+			     unsigned long arg)
 {
-	if (buffer->access->free_blocks)
-		buffer->access->free_blocks(buffer);
-}
-
-long iio_buffer_ioctl(struct iio_dev *indio_dev, struct file *filep,
-		unsigned int cmd, unsigned long arg)
-{
+	struct iio_buffer *buffer = filep->private_data;
+	struct iio_dev *indio_dev;
 	bool non_blocking = filep->f_flags & O_NONBLOCK;
-	struct iio_buffer *buffer = indio_dev->buffer;
 
 	if (!buffer || !buffer->access)
 		return -ENODEV;
+
+	indio_dev = buffer->indio_dev;
 
 	switch (cmd) {
 	case IIO_BLOCK_ALLOC_IOCTL:
@@ -1362,16 +1409,17 @@ long iio_buffer_ioctl(struct iio_dev *indio_dev, struct file *filep,
 	case IIO_BLOCK_DEQUEUE_IOCTL:
 		return iio_buffer_dequeue_block(indio_dev,
 			(struct iio_buffer_block __user *)arg, non_blocking);
+	default:
+		return iio_device_event_ioctl(indio_dev, filep, cmd, arg);
 	}
-	return -EINVAL;
 }
 
-int iio_buffer_mmap(struct file *filep, struct vm_area_struct *vma)
+static int iio_buffer_mmap(struct file *filep, struct vm_area_struct *vma)
 {
-	struct iio_dev *indio_dev = filep->private_data;
+	struct iio_buffer *buffer = filep->private_data;
+	struct iio_dev *indio_dev = buffer->indio_dev;
 
-	if (!indio_dev->buffer || !indio_dev->buffer->access ||
-		!indio_dev->buffer->access->mmap)
+	if (!buffer || !buffer->access || !buffer->access->mmap)
 		return -ENODEV;
 
 	if (!(vma->vm_flags & VM_SHARED))
@@ -1388,7 +1436,7 @@ int iio_buffer_mmap(struct file *filep, struct vm_area_struct *vma)
 		break;
 	}
 
-	return indio_dev->buffer->access->mmap(indio_dev->buffer, vma);
+	return buffer->access->mmap(indio_dev->buffer, vma);
 }
 
 static ssize_t iio_buffer_store_enable(struct device *dev,
@@ -1612,6 +1660,77 @@ void iio_buffer_free_sysfs_and_mask(struct iio_dev *indio_dev)
 	kfree(indio_dev->buffer->buffer_group.attrs);
 	kfree(indio_dev->buffer->scan_el_group.attrs);
 	iio_free_chan_devattr_list(&indio_dev->buffer->scan_el_dev_attr_list);
+}
+
+static const struct file_operations iio_buffer_in_fileops = {
+	.read = iio_buffer_read_outer,
+	.release = iio_buffer_chrdev_release,
+	.open = iio_buffer_chrdev_open,
+	.poll = iio_buffer_poll,
+	.owner = THIS_MODULE,
+	.llseek = noop_llseek,
+	.unlocked_ioctl = iio_buffer_ioctl,
+	.compat_ioctl = iio_buffer_ioctl,
+	.mmap = iio_buffer_mmap,
+};
+
+static const struct file_operations iio_buffer_out_fileops = {
+	.write = iio_buffer_chrdev_write,
+	.release = iio_buffer_chrdev_release,
+	.open = iio_buffer_chrdev_open,
+	.poll = iio_buffer_poll,
+	.owner = THIS_MODULE,
+	.llseek = noop_llseek,
+	.unlocked_ioctl = iio_buffer_ioctl,
+	.compat_ioctl = iio_buffer_ioctl,
+	.mmap = iio_buffer_mmap,
+};
+
+int iio_device_buffers_init(struct iio_dev *indio_dev, struct module *this_mod)
+{
+	struct iio_buffer *buffer = indio_dev->buffer;
+	int ret;
+
+	if (!buffer)
+		return -ENOTSUPP;
+
+	if (indio_dev->direction == IIO_DEVICE_DIRECTION_OUT)
+		cdev_init(&buffer->chrdev, &iio_buffer_out_fileops);
+	else
+		cdev_init(&buffer->chrdev, &iio_buffer_in_fileops);
+
+	buffer->chrdev.owner = this_mod;
+
+	ret = cdev_device_add(&buffer->chrdev, &indio_dev->dev);
+	if (ret)
+		return ret;
+
+	iio_device_get(indio_dev);
+	iio_buffer_get(buffer);
+
+	return 0;
+}
+
+void iio_device_buffers_put(struct iio_dev *indio_dev)
+{
+	struct iio_buffer *buffer = indio_dev->buffer;
+
+	if (!buffer)
+		return;
+
+	iio_buffer_put(buffer);
+}
+
+void iio_device_buffers_uninit(struct iio_dev *indio_dev)
+{
+	struct iio_buffer *buffer = indio_dev->buffer;
+
+	if (!buffer)
+		return;
+
+	cdev_device_del(&buffer->chrdev, &indio_dev->dev);
+	iio_buffer_put(buffer);
+	iio_device_put(indio_dev);
 }
 
 /**

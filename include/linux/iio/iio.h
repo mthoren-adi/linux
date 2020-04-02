@@ -542,6 +542,7 @@ struct iio_buffer_setup_ops {
  * @setup_ops:		[DRIVER] callbacks to call before and after buffer
  *			enable/disable
  * @chrdev:		[INTERN] associated character device
+ * @chrdev_initialized:	[INTERN] true if @chrdev device has been initialized
  * @groups:		[INTERN] attribute groups
  * @groupcounter:	[INTERN] index of next attribute group
  * @flags:		[INTERN] file ops related flags including busy flag.
@@ -586,6 +587,7 @@ struct iio_dev {
 	struct mutex			info_exist_lock;
 	const struct iio_buffer_setup_ops	*setup_ops;
 	struct cdev			chrdev;
+	int				chrdev_initialized;
 #define IIO_MAX_GROUPS 6
 	const struct attribute_group	*groups[IIO_MAX_GROUPS + 1];
 	int				groupcounter;
