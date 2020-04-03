@@ -51,9 +51,6 @@ void iio_device_buffers_uninit(struct iio_dev *indio_dev);
 
 void iio_device_buffers_put(struct iio_dev *indio_dev);
 
-int iio_buffer_alloc_sysfs_and_mask(struct iio_dev *indio_dev);
-void iio_buffer_free_sysfs_and_mask(struct iio_dev *indio_dev);
-
 void iio_disable_all_buffers(struct iio_dev *indio_dev);
 void iio_buffer_wakeup_poll(struct iio_dev *indio_dev);
 
@@ -68,13 +65,6 @@ static inline int iio_device_buffers_init(struct iio_dev *indio_dev,
 static inline void iio_device_buffers_uninit(struct iio_dev *indio_dev) {}
 
 static inline void iio_device_buffers_put(struct iio_dev *indio_dev) {}
-
-static inline int iio_buffer_alloc_sysfs_and_mask(struct iio_dev *indio_dev)
-{
-	return 0;
-}
-
-static inline void iio_buffer_free_sysfs_and_mask(struct iio_dev *indio_dev) {}
 
 static inline void iio_disable_all_buffers(struct iio_dev *indio_dev) {}
 static inline void iio_buffer_wakeup_poll(struct iio_dev *indio_dev) {}
