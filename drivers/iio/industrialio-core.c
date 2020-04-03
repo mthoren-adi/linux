@@ -1583,76 +1583,6 @@ struct iio_dev *devm_iio_device_alloc(struct device *dev, int sizeof_priv)
 }
 EXPORT_SYMBOL_GPL(devm_iio_device_alloc);
 
-/**
- * iio_chrdev_open() - chrdev file open for event ioctls
- * @inode:	Inode structure for identifying the device in the file system
- * @filp:	File structure for iio device used to keep and later access
- *		private data
- *
- * Return: 0 on success or -EBUSY if the device is already opened
- **/
-static int iio_chrdev_open(struct inode *inode, struct file *filp)
-{
-	struct iio_dev *indio_dev = container_of(inode->i_cdev,
-						struct iio_dev, chrdev);
-
-	if (test_and_set_bit(IIO_BUSY_BIT_POS, &indio_dev->flags))
-		return -EBUSY;
-
-	iio_device_get(indio_dev);
-
-	filp->private_data = indio_dev;
-
-	return 0;
-}
-
-/**
- * iio_chrdev_release() - chrdev file close for event ioctls
- * @inode:	Inode structure pointer for the char device
- * @filp:	File structure pointer for the char device
- *
- * Return: 0 for successful release
- */
-static int iio_chrdev_release(struct inode *inode, struct file *filp)
-{
-	struct iio_dev *indio_dev = container_of(inode->i_cdev,
-						struct iio_dev, chrdev);
-	clear_bit(IIO_BUSY_BIT_POS, &indio_dev->flags);
-	iio_device_put(indio_dev);
-
-	return 0;
-}
-
-long iio_device_event_ioctl(struct iio_dev *indio_dev, struct file *filp,
-			    unsigned int cmd, unsigned long arg)
-{
-	int __user *ip = (int __user *)arg;
-	int fd;
-
-	if (!indio_dev->info)
-		return -ENODEV;
-
-	if (cmd == IIO_GET_EVENT_FD_IOCTL) {
-		fd = iio_event_getfd(indio_dev);
-		if (fd < 0)
-			return fd;
-		if (copy_to_user(ip, &fd, sizeof(fd)))
-			return -EFAULT;
-		return 0;
-	}
-	return -EINVAL;
-}
-
-/* Somewhat of a cross file organization violation - ioctls here are actually
- * event related */
-static long iio_event_ioctl_wrapper(struct file *filp, unsigned int cmd,
-				    unsigned long arg)
-{
-	struct iio_dev *indio_dev = filp->private_data;
-
-	return iio_device_event_ioctl(indio_dev, filp, cmd, arg);
-}
-
 static bool iio_chan_same_size(const struct iio_chan_spec *a,
 	const struct iio_chan_spec *b)
 {
@@ -1690,15 +1620,6 @@ static int iio_check_unique_scan_index(struct iio_dev *indio_dev)
 }
 
 static const struct iio_buffer_setup_ops noop_ring_setup_ops;
-
-static const struct file_operations iio_event_fileops = {
-	.release = iio_chrdev_release,
-	.open = iio_chrdev_open,
-	.owner = THIS_MODULE,
-	.llseek = noop_llseek,
-	.unlocked_ioctl = iio_event_ioctl_wrapper,
-	.compat_ioctl = iio_event_ioctl_wrapper,
-};
 
 int __iio_device_register(struct iio_dev *indio_dev, struct module *this_mod)
 {
@@ -1748,18 +1669,9 @@ int __iio_device_register(struct iio_dev *indio_dev, struct module *this_mod)
 		if (ret != -ENOTSUPP)
 			goto error_unreg_eventset;
 
-		if (!indio_dev->event_interface)
-			return 0;
-
-		cdev_init(&indio_dev->chrdev, &iio_event_fileops);
-
-		indio_dev->chrdev.owner = this_mod;
-
-		ret = cdev_device_add(&indio_dev->chrdev, &indio_dev->dev);
-		if (ret < 0)
+		ret = iio_device_register_event_chrdev(indio_dev, this_mod);
+		if (ret)
 			goto error_unreg_eventset;
-
-		indio_dev->chrdev_initialized = true;
 	}
 
 	return 0;
@@ -1779,10 +1691,7 @@ EXPORT_SYMBOL(__iio_device_register);
  **/
 void iio_device_unregister(struct iio_dev *indio_dev)
 {
-	if (indio_dev->chrdev_initialized)
-		cdev_device_del(&indio_dev->chrdev, &indio_dev->dev);
-
-	indio_dev->chrdev_initialized = false;
+	iio_device_unregister_event_chrdev(indio_dev);
 
 	iio_device_buffers_uninit(indio_dev);
 

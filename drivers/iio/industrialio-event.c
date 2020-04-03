@@ -33,6 +33,9 @@
  * @flags:		file operations related flags including busy flag.
  * @group:		event interface sysfs attribute group
  * @read_lock:		lock to protect kfifo read operations
+ * @chrdev:		associated chardev for this event
+ * @chrdev_initialized:	true if this @chrdev was initialized
+ * @indio_dev:		IIO device to which this event interface belongs to
  */
 struct iio_event_interface {
 	wait_queue_head_t	wait;
@@ -42,6 +45,10 @@ struct iio_event_interface {
 	unsigned long		flags;
 	struct attribute_group	group;
 	struct mutex		read_lock;
+
+	struct cdev		chrdev;
+	bool			chrdev_initialized;
+	struct iio_dev		*indio_dev;
 };
 
 bool iio_event_enabled(const struct iio_event_interface *ev_int)
@@ -185,7 +192,7 @@ static const struct file_operations iio_event_chrdev_fileops = {
 	.llseek = noop_llseek,
 };
 
-int iio_event_getfd(struct iio_dev *indio_dev)
+static int iio_event_getfd(struct iio_dev *indio_dev)
 {
 	struct iio_event_interface *ev_int = indio_dev->event_interface;
 	int fd;
@@ -216,6 +223,120 @@ int iio_event_getfd(struct iio_dev *indio_dev)
 unlock:
 	mutex_unlock(&indio_dev->mlock);
 	return fd;
+}
+
+/**
+ * iio_chrdev_open() - chrdev file open for event ioctls
+ * @inode:	Inode structure for identifying the device in the file system
+ * @filp:	File structure for iio device used to keep and later access
+ *		private data
+ *
+ * Return: 0 on success or -EBUSY if the device is already opened
+ **/
+static int iio_chrdev_open(struct inode *inode, struct file *filp)
+{
+	struct iio_event_interface *ev =
+		container_of(inode->i_cdev, struct iio_event_interface, chrdev);
+
+	if (test_and_set_bit(IIO_BUSY_BIT_POS, &ev->flags))
+		return -EBUSY;
+
+	iio_device_get(ev->indio_dev);
+
+	filp->private_data = ev;
+
+	return 0;
+}
+
+/**
+ * iio_chrdev_release() - chrdev file close for event ioctls
+ * @inode:	Inode structure pointer for the char device
+ * @filp:	File structure pointer for the char device
+ *
+ * Return: 0 for successful release
+ */
+static int iio_chrdev_release(struct inode *inode, struct file *filp)
+{
+	struct iio_event_interface *ev =
+		container_of(inode->i_cdev, struct iio_event_interface, chrdev);
+
+	clear_bit(IIO_BUSY_BIT_POS, &ev->flags);
+	iio_device_put(ev->indio_dev);
+
+	return 0;
+}
+
+long iio_device_event_ioctl(struct iio_dev *indio_dev, struct file *filp,
+			    unsigned int cmd, unsigned long arg)
+{
+	int __user *ip = (int __user *)arg;
+	int fd;
+
+	if (!indio_dev->info)
+		return -ENODEV;
+
+	if (cmd == IIO_GET_EVENT_FD_IOCTL) {
+		fd = iio_event_getfd(indio_dev);
+		if (fd < 0)
+			return fd;
+		if (copy_to_user(ip, &fd, sizeof(fd)))
+			return -EFAULT;
+		return 0;
+	}
+	return -EINVAL;
+}
+
+static long iio_event_ioctl_wrapper(struct file *filp, unsigned int cmd,
+				    unsigned long arg)
+{
+	struct iio_event_interface *ev = filp->private_data;
+
+	return iio_device_event_ioctl(ev->indio_dev, filp, cmd, arg);
+}
+
+static const struct file_operations iio_device_event_fileops = {
+	.release = iio_chrdev_release,
+	.open = iio_chrdev_open,
+	.owner = THIS_MODULE,
+	.llseek = noop_llseek,
+	.unlocked_ioctl = iio_event_ioctl_wrapper,
+	.compat_ioctl = iio_event_ioctl_wrapper,
+};
+
+int iio_device_register_event_chrdev(struct iio_dev *indio_dev,
+				     struct module *this_mod)
+{
+	struct iio_event_interface *ev = indio_dev->event_interface;
+	int ret;
+
+	if (!ev)
+		return 0;
+
+	cdev_init(&ev->chrdev, &iio_device_event_fileops);
+
+	ev->chrdev.owner = this_mod;
+	ev->indio_dev = indio_dev;
+
+	ret = cdev_device_add(&ev->chrdev, &indio_dev->dev);
+	if (ret < 0)
+		return ret;
+
+	ev->chrdev_initialized = true;
+
+	return 0;
+}
+
+void iio_device_unregister_event_chrdev(struct iio_dev *indio_dev)
+{
+	struct iio_event_interface *ev = indio_dev->event_interface;
+
+	if (!ev)
+		return;
+
+	if (ev->chrdev_initialized)
+		cdev_device_del(&ev->chrdev, &indio_dev->dev);
+
+	ev->chrdev_initialized = false;
 }
 
 static const char * const iio_ev_type_text[] = {
