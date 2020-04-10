@@ -151,20 +151,17 @@ struct iio_buffer {
 	unsigned int watermark;
 
 	/* private: */
+	/* @buffer_dir: kobject for the buffer's 'buffer' sub-directory. */
+	struct kobject buffer_dir;
+
+	/* @scan_el_dir: kobject for the buffer's 'scan_elements' sub-directory. */
+	struct kobject scan_el_dir;
+
 	/* @scan_timestamp: Does the scan mode include a timestamp. */
 	bool scan_timestamp;
 
 	/* @scan_el_dev_attr_list: List of scan element related attributes. */
 	struct list_head scan_el_dev_attr_list;
-
-	/* @buffer_group: Attributes of the buffer group. */
-	struct attribute_group buffer_group;
-
-	/*
-	 * @scan_el_group: Attribute group for those attributes not
-	 * created from the iio_chan_info array.
-	 */
-	struct attribute_group scan_el_group;
 
 	/* @attrs: Standard attributes of the buffer. */
 	const struct attribute **attrs;

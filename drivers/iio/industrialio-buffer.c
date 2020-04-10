@@ -1473,8 +1473,6 @@ done:
 	return (ret < 0) ? ret : len;
 }
 
-static const char * const iio_scan_elements_group_name = "scan_elements";
-
 static ssize_t iio_buffer_show_watermark(struct device *dev,
 					 struct device_attribute *attr,
 					 char *buf)
@@ -1544,9 +1542,8 @@ static umode_t iio_buffer_attr_group_is_visible(struct kobject *kobj,
 						struct attribute *attr,
 						int index)
 {
-	struct device *dev = container_of(kobj, struct device, kobj);
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
-	struct iio_buffer *buffer = indio_dev->buffer;
+	struct iio_buffer *buffer =
+		container_of(kobj, struct iio_buffer, buffer_dir);
 
 	switch (index) {
 	case IIO_BUFFER_ATTR_LENGTH:
@@ -1576,15 +1573,113 @@ static struct attribute *iio_buffer_attrs[] = {
 	[IIO_BUFFER_ATTR_ENABLE] = &dev_attr_enable.attr,
 	[IIO_BUFFER_ATTR_WATERMARK] = &dev_attr_watermark.attr,
 	[IIO_BUFFER_ATTR_DATA_AVAILABLE] = &dev_attr_data_available.attr,
+	NULL
+};
+
+static const struct attribute_group iio_buffer_attrs_group = {
+	.attrs = iio_buffer_attrs,
+	.is_visible = iio_buffer_attr_group_is_visible,
+};
+
+static const struct attribute_group *iio_buffer_attrs_groups[] = {
+	&iio_buffer_attrs_group,
+	NULL
+};
+
+static ssize_t iio_buffer_dir_show(struct kobject *kobj,
+				   struct attribute *attr, char *buf)
+{
+	struct device_attribute *dattr =
+		container_of(attr, struct device_attribute, attr);
+	struct iio_buffer *buffer =
+		container_of(kobj, struct iio_buffer, buffer_dir);
+	struct iio_dev *indio_dev = buffer->indio_dev;
+
+	if (!dattr->show)
+		return -EIO;
+
+	return dattr->show(&indio_dev->dev, dattr, buf);
+}
+
+static ssize_t iio_buffer_dir_store(struct kobject *kobj,
+				    struct attribute *attr,
+				    const char *buf, size_t len)
+{
+	struct device_attribute *dattr =
+		container_of(attr, struct device_attribute, attr);
+	struct iio_buffer *buffer =
+		container_of(kobj, struct iio_buffer, buffer_dir);
+	struct iio_dev *indio_dev = buffer->indio_dev;
+
+	if (!dattr->store)
+		return -EIO;
+
+	return dattr->store(&indio_dev->dev, dattr, buf, len);
+}
+
+static void iio_buffer_dir_noop_release(struct kobject *kobj)
+{
+	/* Nothing to do, iio_buffer_free_sysfs_and_mask() should cleanup */
+}
+
+static struct sysfs_ops iio_buffer_dir_ops = {
+	.show = iio_buffer_dir_show,
+	.store = iio_buffer_dir_store,
+};
+
+static struct kobj_type iio_buffer_dir_ktype = {
+	.release = iio_buffer_dir_noop_release,
+	.sysfs_ops = &iio_buffer_dir_ops,
+	.default_groups = iio_buffer_attrs_groups,
+};
+
+static ssize_t iio_scan_el_dir_show(struct kobject *kobj,
+				    struct attribute *attr, char *buf)
+{
+	struct device_attribute *dattr =
+		container_of(attr, struct device_attribute, attr);
+	struct iio_buffer *buffer =
+		container_of(kobj, struct iio_buffer, scan_el_dir);
+	struct iio_dev *indio_dev = buffer->indio_dev;
+
+	if (!dattr->show)
+		return -EIO;
+
+	return dattr->show(&indio_dev->dev, dattr, buf);
+}
+
+static ssize_t iio_scan_el_dir_store(struct kobject *kobj,
+				     struct attribute *attr,
+				     const char *buf, size_t len)
+{
+	struct device_attribute *dattr =
+		container_of(attr, struct device_attribute, attr);
+	struct iio_buffer *buffer =
+		container_of(kobj, struct iio_buffer, scan_el_dir);
+	struct iio_dev *indio_dev = buffer->indio_dev;
+
+	if (!dattr->store)
+		return -EIO;
+
+	return dattr->store(&indio_dev->dev, dattr, buf, len);
+}
+
+static struct sysfs_ops iio_scan_el_dir_ops = {
+	.show = iio_scan_el_dir_show,
+	.store = iio_scan_el_dir_store,
+};
+
+static struct kobj_type iio_scan_el_dir_ktype = {
+	.release = iio_buffer_dir_noop_release,
+	.sysfs_ops = &iio_scan_el_dir_ops,
 };
 
 static int iio_buffer_alloc_sysfs_and_mask(struct iio_buffer *buffer)
 {
 	struct iio_dev *indio_dev = buffer->indio_dev;
 	struct iio_dev_attr *p;
-	struct attribute **attr;
-	int ret, i, attrn, attrcount, attrcount_orig = 0;
 	const struct iio_chan_spec *channels;
+	int ret, i;
 
 	channels = indio_dev->channels;
 	if (channels) {
@@ -1595,32 +1690,17 @@ static int iio_buffer_alloc_sysfs_and_mask(struct iio_buffer *buffer)
 		indio_dev->masklength = ml;
 	}
 
-	attrcount = 0;
+	ret = kobject_init_and_add(&buffer->buffer_dir, &iio_buffer_dir_ktype,
+				   &indio_dev->dev.kobj, "buffer");
+	if (ret)
+		return ret;
+
 	if (buffer->attrs) {
-		while (buffer->attrs[attrcount] != NULL)
-			attrcount++;
+		ret = sysfs_create_files(&buffer->buffer_dir, buffer->attrs);
+		if (ret)
+			goto error_remove_buffer_group;
 	}
 
-	attr = kcalloc(attrcount + ARRAY_SIZE(iio_buffer_attrs) + 1,
-		       sizeof(struct attribute *), GFP_KERNEL);
-	if (!attr)
-		return -ENOMEM;
-
-	memcpy(attr, iio_buffer_attrs, sizeof(iio_buffer_attrs));
-
-	if (buffer->attrs)
-		memcpy(&attr[ARRAY_SIZE(iio_buffer_attrs)], buffer->attrs,
-		       sizeof(struct attribute *) * attrcount);
-
-	attr[attrcount + ARRAY_SIZE(iio_buffer_attrs)] = NULL;
-
-	buffer->buffer_group.name = "buffer";
-	buffer->buffer_group.is_visible = iio_buffer_attr_group_is_visible;
-	buffer->buffer_group.attrs = attr;
-
-	indio_dev->groups[indio_dev->groupcounter++] = &buffer->buffer_group;
-
-	attrcount = attrcount_orig;
 	INIT_LIST_HEAD(&buffer->scan_el_dev_attr_list);
 	channels = indio_dev->channels;
 	if (channels) {
@@ -1633,7 +1713,6 @@ static int iio_buffer_alloc_sysfs_and_mask(struct iio_buffer *buffer)
 							 &channels[i], i);
 			if (ret < 0)
 				goto error_cleanup_dynamic;
-			attrcount += ret;
 			if (channels[i].type == IIO_TIMESTAMP)
 				indio_dev->scan_index_timestamp =
 					channels[i].scan_index;
@@ -1644,38 +1723,62 @@ static int iio_buffer_alloc_sysfs_and_mask(struct iio_buffer *buffer)
 			goto error_cleanup_dynamic;
 	}
 
-	buffer->scan_el_group.name = iio_scan_elements_group_name;
-
-	buffer->scan_el_group.attrs = kcalloc(attrcount + 1,
-					      sizeof(buffer->scan_el_group.attrs[0]),
-					      GFP_KERNEL);
-	if (buffer->scan_el_group.attrs == NULL) {
-		ret = -ENOMEM;
+	ret = kobject_init_and_add(&buffer->scan_el_dir,
+				   &iio_scan_el_dir_ktype, &buffer->buffer_dir,
+				   "scan_elements");
+	if (ret)
 		goto error_free_scan_mask;
-	}
-	attrn = attrcount_orig;
 
-	list_for_each_entry(p, &buffer->scan_el_dev_attr_list, l)
-		buffer->scan_el_group.attrs[attrn++] = &p->dev_attr.attr;
-	indio_dev->groups[indio_dev->groupcounter++] = &buffer->scan_el_group;
+	i = 0;
+	list_for_each_entry(p, &buffer->scan_el_dev_attr_list, l) {
+		ret = sysfs_create_file(&buffer->scan_el_dir,
+					&p->dev_attr.attr);
+		if (ret)
+			goto error_remove_scan_el_dir;
+		i++;
+	}
+
+	ret = sysfs_create_link(&indio_dev->dev.kobj, &buffer->scan_el_dir,
+				"scan_elements");
+	if (ret)
+		goto error_remove_scan_el_dir;
 
 	return 0;
 
+error_remove_scan_el_dir:
+	list_for_each_entry(p, &buffer->scan_el_dev_attr_list, l) {
+		if (i == 0)
+			break;
+		sysfs_remove_file(&buffer->scan_el_dir, &p->dev_attr.attr);
+		i--;
+	}
+	kobject_put(&buffer->scan_el_dir);
 error_free_scan_mask:
 	iio_buffer_free_scanmask(buffer);
 error_cleanup_dynamic:
+	if (buffer->attrs)
+		sysfs_remove_files(&buffer->buffer_dir, buffer->attrs);
 	iio_free_chan_devattr_list(&buffer->scan_el_dev_attr_list);
-	kfree(indio_dev->buffer->buffer_group.attrs);
+error_remove_buffer_group:
+	kobject_put(&buffer->buffer_dir);
 
 	return ret;
 }
 
 static void iio_buffer_free_sysfs_and_mask(struct iio_buffer *buffer)
 {
+	struct iio_dev *indio_dev = buffer->indio_dev;
+	struct iio_dev_attr *p;
+
+	sysfs_remove_link(&indio_dev->dev.kobj, "scan_elements");
+	list_for_each_entry(p, &buffer->scan_el_dev_attr_list, l)
+		sysfs_remove_file(&buffer->scan_el_dir, &p->dev_attr.attr);
+	kobject_put(&buffer->scan_el_dir);
 	iio_buffer_free_scanmask(buffer);
-	kfree(buffer->buffer_group.attrs);
-	kfree(buffer->scan_el_group.attrs);
+	if (buffer->attrs)
+		sysfs_remove_files(&buffer->buffer_dir, buffer->attrs);
 	iio_free_chan_devattr_list(&buffer->scan_el_dev_attr_list);
+	kobject_put(&buffer->buffer_dir);
 }
 
 static const struct file_operations iio_buffer_in_fileops = {
@@ -1710,10 +1813,6 @@ int iio_device_buffers_init(struct iio_dev *indio_dev, struct module *this_mod)
 	if (!buffer)
 		return -ENOTSUPP;
 
-	ret = iio_buffer_alloc_sysfs_and_mask(buffer);
-	if (ret)
-		return ret;
-
 	if (indio_dev->direction == IIO_DEVICE_DIRECTION_OUT)
 		cdev_init(&buffer->chrdev, &iio_buffer_out_fileops);
 	else
@@ -1724,6 +1823,12 @@ int iio_device_buffers_init(struct iio_dev *indio_dev, struct module *this_mod)
 	ret = cdev_device_add(&buffer->chrdev, &indio_dev->dev);
 	if (ret) {
 		iio_buffer_free_sysfs_and_mask(buffer);
+		return ret;
+	}
+
+	ret = iio_buffer_alloc_sysfs_and_mask(buffer);
+	if (ret) {
+		cdev_device_del(&buffer->chrdev, &indio_dev->dev);
 		return ret;
 	}
 
@@ -1750,8 +1855,8 @@ void iio_device_buffers_uninit(struct iio_dev *indio_dev)
 	if (!buffer)
 		return;
 
-	cdev_device_del(&buffer->chrdev, &indio_dev->dev);
 	iio_buffer_free_sysfs_and_mask(buffer);
+	cdev_device_del(&buffer->chrdev, &indio_dev->dev);
 	iio_buffer_put(buffer);
 	iio_device_put(indio_dev);
 }

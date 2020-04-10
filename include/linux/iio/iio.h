@@ -585,7 +585,7 @@ struct iio_dev {
 	clockid_t			clock_id;
 	struct mutex			info_exist_lock;
 	const struct iio_buffer_setup_ops	*setup_ops;
-#define IIO_MAX_GROUPS 6
+#define IIO_MAX_GROUPS 4
 	const struct attribute_group	*groups[IIO_MAX_GROUPS + 1];
 	int				groupcounter;
 
