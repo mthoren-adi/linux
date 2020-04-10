@@ -1532,24 +1532,50 @@ static ssize_t iio_dma_show_data_available(struct device *dev,
 	return sprintf(buf, "%zu\n", bytes);
 }
 
+enum {
+	IIO_BUFFER_ATTR_LENGTH,
+	IIO_BUFFER_ATTR_ENABLE,
+	IIO_BUFFER_ATTR_WATERMARK,
+	IIO_BUFFER_ATTR_DATA_AVAILABLE,
+	__IIO_BUFFER_ATTR_MAX
+};
+
+static umode_t iio_buffer_attr_group_is_visible(struct kobject *kobj,
+						struct attribute *attr,
+						int index)
+{
+	struct device *dev = container_of(kobj, struct device, kobj);
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct iio_buffer *buffer = indio_dev->buffer;
+
+	switch (index) {
+	case IIO_BUFFER_ATTR_LENGTH:
+		if (!buffer->access->set_length)
+			return S_IRUGO;
+		return attr->mode;
+	case IIO_BUFFER_ATTR_WATERMARK:
+		if (buffer->access->flags & INDIO_BUFFER_FLAG_FIXED_WATERMARK)
+			return S_IRUGO;
+		return attr->mode;
+	default:
+		return attr->mode;
+	}
+}
+
 static DEVICE_ATTR(length, S_IRUGO | S_IWUSR, iio_buffer_read_length,
 		   iio_buffer_write_length);
-static struct device_attribute dev_attr_length_ro = __ATTR(length,
-	S_IRUGO, iio_buffer_read_length, NULL);
 static DEVICE_ATTR(enable, S_IRUGO | S_IWUSR,
 		   iio_buffer_show_enable, iio_buffer_store_enable);
 static DEVICE_ATTR(watermark, S_IRUGO | S_IWUSR,
 		   iio_buffer_show_watermark, iio_buffer_store_watermark);
-static struct device_attribute dev_attr_watermark_ro = __ATTR(watermark,
-	S_IRUGO, iio_buffer_show_watermark, NULL);
 static DEVICE_ATTR(data_available, S_IRUGO,
 		iio_dma_show_data_available, NULL);
 
 static struct attribute *iio_buffer_attrs[] = {
-	&dev_attr_length.attr,
-	&dev_attr_enable.attr,
-	&dev_attr_watermark.attr,
-	&dev_attr_data_available.attr,
+	[IIO_BUFFER_ATTR_LENGTH] = &dev_attr_length.attr,
+	[IIO_BUFFER_ATTR_ENABLE] = &dev_attr_enable.attr,
+	[IIO_BUFFER_ATTR_WATERMARK] = &dev_attr_watermark.attr,
+	[IIO_BUFFER_ATTR_DATA_AVAILABLE] = &dev_attr_data_available.attr,
 };
 
 static int iio_buffer_alloc_sysfs_and_mask(struct iio_buffer *buffer)
@@ -1581,11 +1607,6 @@ static int iio_buffer_alloc_sysfs_and_mask(struct iio_buffer *buffer)
 		return -ENOMEM;
 
 	memcpy(attr, iio_buffer_attrs, sizeof(iio_buffer_attrs));
-	if (!buffer->access->set_length)
-		attr[0] = &dev_attr_length_ro.attr;
-
-	if (buffer->access->flags & INDIO_BUFFER_FLAG_FIXED_WATERMARK)
-		attr[2] = &dev_attr_watermark_ro.attr;
 
 	if (buffer->attrs)
 		memcpy(&attr[ARRAY_SIZE(iio_buffer_attrs)], buffer->attrs,
@@ -1594,6 +1615,7 @@ static int iio_buffer_alloc_sysfs_and_mask(struct iio_buffer *buffer)
 	attr[attrcount + ARRAY_SIZE(iio_buffer_attrs)] = NULL;
 
 	buffer->buffer_group.name = "buffer";
+	buffer->buffer_group.is_visible = iio_buffer_attr_group_is_visible;
 	buffer->buffer_group.attrs = attr;
 
 	indio_dev->groups[indio_dev->groupcounter++] = &buffer->buffer_group;
