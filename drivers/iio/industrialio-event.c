@@ -36,6 +36,7 @@
  * @chrdev:		associated chardev for this event
  * @chrdev_initialized:	true if this @chrdev was initialized
  * @indio_dev:		IIO device to which this event interface belongs to
+ * @ioctl_handler:	handler for event ioctl() calls
  */
 struct iio_event_interface {
 	wait_queue_head_t	wait;
@@ -49,6 +50,7 @@ struct iio_event_interface {
 	struct cdev		chrdev;
 	bool			chrdev_initialized;
 	struct iio_dev		*indio_dev;
+	struct iio_ioctl_handler	ioctl_handler;
 };
 
 bool iio_event_enabled(const struct iio_event_interface *ev_int)
@@ -266,14 +268,11 @@ static int iio_chrdev_release(struct inode *inode, struct file *filp)
 	return 0;
 }
 
-long iio_device_event_ioctl(struct iio_dev *indio_dev, struct file *filp,
+static long iio_event_ioctl(struct iio_dev *indio_dev, struct file *filp,
 			    unsigned int cmd, unsigned long arg)
 {
 	int __user *ip = (int __user *)arg;
 	int fd;
-
-	if (!indio_dev->info)
-		return -ENODEV;
 
 	if (cmd == IIO_GET_EVENT_FD_IOCTL) {
 		fd = iio_event_getfd(indio_dev);
@@ -283,7 +282,7 @@ long iio_device_event_ioctl(struct iio_dev *indio_dev, struct file *filp,
 			return -EFAULT;
 		return 0;
 	}
-	return -EINVAL;
+	return IIO_IOCTL_UNHANDLED;
 }
 
 static long iio_event_ioctl_wrapper(struct file *filp, unsigned int cmd,
@@ -291,7 +290,7 @@ static long iio_event_ioctl_wrapper(struct file *filp, unsigned int cmd,
 {
 	struct iio_event_interface *ev = filp->private_data;
 
-	return iio_device_event_ioctl(ev->indio_dev, filp, cmd, arg);
+	return iio_device_ioctl(ev->indio_dev, filp, cmd, arg);
 }
 
 static const struct file_operations iio_device_event_fileops = {
@@ -316,10 +315,15 @@ int iio_device_register_event_chrdev(struct iio_dev *indio_dev,
 
 	ev->chrdev.owner = this_mod;
 	ev->indio_dev = indio_dev;
+	ev->ioctl_handler.ioctl = iio_event_ioctl;
+
+	iio_device_ioctl_handler_register(indio_dev, &ev->ioctl_handler);
 
 	ret = cdev_device_add(&ev->chrdev, &indio_dev->dev);
-	if (ret < 0)
+	if (ret < 0) {
+		iio_device_ioctl_handler_unregister(&ev->ioctl_handler);
 		return ret;
+	}
 
 	ev->chrdev_initialized = true;
 
@@ -332,6 +336,8 @@ void iio_device_unregister_event_chrdev(struct iio_dev *indio_dev)
 
 	if (!ev)
 		return;
+
+	iio_device_ioctl_handler_unregister(&ev->ioctl_handler);
 
 	if (ev->chrdev_initialized)
 		cdev_device_del(&ev->chrdev, &indio_dev->dev);
