@@ -513,6 +513,7 @@ struct iio_buffer_setup_ops {
  * @currentmode:	[DRIVER] current operating mode
  * @dev:		[DRIVER] device structure, should be assigned a parent
  *			and owner
+ * @ioctl_handlers:	[INTERN] list of registered ioctl handlers
  * @event_interface:	[INTERN] event chrdevs associated with interrupt lines
  * @buffer:		[DRIVER] any buffer present
  * @buffer_list:	[INTERN] list of all buffers currently attached
@@ -553,6 +554,7 @@ struct iio_dev {
 	int				modes;
 	int				currentmode;
 	struct device			dev;
+	struct list_head		ioctl_handlers;
 
 	struct iio_event_interface	*event_interface;
 

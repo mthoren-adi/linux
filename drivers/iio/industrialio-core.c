@@ -1527,6 +1527,7 @@ struct iio_dev *iio_device_alloc(int sizeof_priv)
 		dev_set_drvdata(&dev->dev, (void *)dev);
 		mutex_init(&dev->mlock);
 		mutex_init(&dev->info_exist_lock);
+		INIT_LIST_HEAD(&dev->ioctl_handlers);
 		INIT_LIST_HEAD(&dev->channel_attr_list);
 		INIT_LIST_HEAD(&dev->buffer_list);
 	}
@@ -1582,6 +1583,37 @@ struct iio_dev *devm_iio_device_alloc(struct device *dev, int sizeof_priv)
 	return iio_dev;
 }
 EXPORT_SYMBOL_GPL(devm_iio_device_alloc);
+
+void iio_device_ioctl_handler_register(struct iio_dev *indio_dev,
+				       struct iio_ioctl_handler *h)
+{
+	list_add_tail(&h->entry, &indio_dev->ioctl_handlers);
+}
+
+void iio_device_ioctl_handler_unregister(struct iio_ioctl_handler *h)
+{
+	list_del(&h->entry);
+}
+
+long iio_device_ioctl(struct iio_dev *indio_dev, struct file *filp,
+		      unsigned int cmd, unsigned long arg)
+{
+	struct iio_ioctl_handler *h;
+	int ret;
+
+	if (!indio_dev->info)
+		return -ENODEV;
+
+	list_for_each_entry(h, &indio_dev->ioctl_handlers, entry) {
+		ret = h->ioctl(indio_dev, filp, cmd, arg);
+		if (ret == 0)
+			return 0;
+		if (ret != IIO_IOCTL_UNHANDLED)
+			return ret;
+	}
+
+	return -EINVAL;
+}
 
 static bool iio_chan_same_size(const struct iio_chan_spec *a,
 	const struct iio_chan_spec *b)
