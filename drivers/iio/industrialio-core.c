@@ -1532,6 +1532,7 @@ struct iio_dev *iio_device_alloc(int sizeof_priv)
 	}
 	dev_set_name(&dev->dev, "iio:device%d", dev->id);
 	INIT_LIST_HEAD(&dev->buffer_list);
+	INIT_LIST_HEAD(&dev->ioctl_handlers);
 
 	return dev;
 }
@@ -1584,6 +1585,37 @@ struct iio_dev *devm_iio_device_alloc(struct device *dev, int sizeof_priv)
 	return iio_dev;
 }
 EXPORT_SYMBOL_GPL(devm_iio_device_alloc);
+
+void iio_device_ioctl_handler_register(struct iio_dev *indio_dev,
+				       struct iio_ioctl_handler *h)
+{
+	/* this assumes that all ioctl() handlers are statically allocated */
+	list_add_tail(&h->entry, &indio_dev->ioctl_handlers);
+}
+
+long iio_device_ioctl(struct iio_dev *indio_dev, struct file *filp,
+		      unsigned int cmd, unsigned long arg)
+{
+	struct iio_ioctl_handler *h;
+	int ret = -ENODEV;
+
+	mutex_lock(&indio_dev->info_exist_lock);
+
+	if (!indio_dev->info)
+		goto out_unlock;
+
+	ret = -EINVAL;
+	list_for_each_entry(h, &indio_dev->ioctl_handlers, entry) {
+		ret = h->ioctl(indio_dev, filp, cmd, arg);
+		if (ret != IIO_IOCTL_UNHANDLED)
+			break;
+	}
+
+out_unlock:
+	mutex_unlock(&indio_dev->info_exist_lock);
+
+	return ret;
+}
 
 static bool iio_chan_same_size(const struct iio_chan_spec *a,
 	const struct iio_chan_spec *b)
@@ -1733,6 +1765,8 @@ EXPORT_SYMBOL(__iio_device_register);
  **/
 void iio_device_unregister(struct iio_dev *indio_dev)
 {
+	struct iio_ioctl_handler *h, *t;
+
 	cdev_device_del(indio_dev->chrdev, &indio_dev->dev);
 	iio_device_free_chrdev_id(&indio_dev->dev);
 
@@ -1741,6 +1775,9 @@ void iio_device_unregister(struct iio_dev *indio_dev)
 	iio_device_unregister_debugfs(indio_dev);
 
 	iio_disable_all_buffers(indio_dev);
+
+	list_for_each_entry_safe(h, t, &indio_dev->ioctl_handlers, entry)
+		list_del(&h->entry);
 
 	indio_dev->info = NULL;
 
