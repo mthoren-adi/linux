@@ -35,6 +35,7 @@
  * @read_lock:		lock to protect kfifo read operations
  * @chrdev:		associated chardev for this event
  * @indio_dev:		IIO device to which this event interface belongs to
+ * @ioctl_handler:	handler for event ioctl() calls
  */
 struct iio_event_interface {
 	wait_queue_head_t	wait;
@@ -47,6 +48,7 @@ struct iio_event_interface {
 
 	struct cdev		chrdev;
 	struct iio_dev		*indio_dev;
+	struct iio_ioctl_handler	ioctl_handler;
 };
 
 bool iio_event_enabled(const struct iio_event_interface *ev_int)
@@ -264,14 +266,11 @@ static int iio_chrdev_release(struct inode *inode, struct file *filp)
 	return 0;
 }
 
-long iio_device_event_ioctl(struct iio_dev *indio_dev, struct file *filp,
+static long iio_event_ioctl(struct iio_dev *indio_dev, struct file *filp,
 			    unsigned int cmd, unsigned long arg)
 {
 	int __user *ip = (int __user *)arg;
 	int fd;
-
-	if (!indio_dev->info)
-		return -ENODEV;
 
 	if (cmd == IIO_GET_EVENT_FD_IOCTL) {
 		fd = iio_event_getfd(indio_dev);
@@ -281,7 +280,7 @@ long iio_device_event_ioctl(struct iio_dev *indio_dev, struct file *filp,
 			return -EFAULT;
 		return 0;
 	}
-	return -EINVAL;
+	return IIO_IOCTL_UNHANDLED;
 }
 
 static long iio_event_ioctl_wrapper(struct file *filp, unsigned int cmd,
@@ -289,7 +288,7 @@ static long iio_event_ioctl_wrapper(struct file *filp, unsigned int cmd,
 {
 	struct iio_event_interface *ev = filp->private_data;
 
-	return iio_device_event_ioctl(ev->indio_dev, filp, cmd, arg);
+	return iio_device_ioctl(ev->indio_dev, filp, cmd, arg);
 }
 
 static const struct file_operations iio_event_fileops = {
@@ -311,7 +310,10 @@ void iio_device_event_attach_chrdev(struct iio_dev *indio_dev)
 	cdev_init(&ev->chrdev, &iio_event_fileops);
 
 	ev->indio_dev = indio_dev;
+	ev->ioctl_handler.ioctl = iio_event_ioctl;
 	indio_dev->chrdev = &ev->chrdev;
+
+	iio_device_ioctl_handler_register(indio_dev, &ev->ioctl_handler);
 }
 
 static const char * const iio_ev_type_text[] = {

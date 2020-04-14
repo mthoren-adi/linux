@@ -1601,6 +1601,11 @@ long iio_device_ioctl(struct iio_dev *indio_dev, struct file *filp,
 
 	mutex_lock(&indio_dev->info_exist_lock);
 
+	/**
+	 * The NULL check here is required to prevent crashing when a device
+	 * is being removed while userspace would still have open file handles
+	 * to try to access this device.
+	 */
 	if (!indio_dev->info)
 		goto out_unlock;
 

@@ -1415,8 +1415,7 @@ static long iio_buffer_ioctl(struct file *filep, unsigned int cmd,
 		return iio_buffer_dequeue_block(buffer->indio_dev,
 			(struct iio_buffer_block __user *)arg, non_blocking);
 	default:
-		return iio_device_event_ioctl(buffer->indio_dev, filep, cmd,
-					      arg);
+		return iio_device_ioctl(buffer->indio_dev, filep, cmd, arg);
 	}
 }
 

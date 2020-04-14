@@ -57,9 +57,6 @@ ssize_t iio_format_value(char *buf, unsigned int type, int size, int *vals);
 #ifdef CONFIG_IIO_BUFFER
 struct poll_table_struct;
 
-long iio_device_event_ioctl(struct iio_dev *indio_dev, struct file *filp,
-			    unsigned int cmd, unsigned long arg);
-
 void iio_device_buffer_attach_chrdev(struct iio_dev *indio_dev);
 
 int iio_buffer_alloc_sysfs_and_mask(struct iio_dev *indio_dev);
