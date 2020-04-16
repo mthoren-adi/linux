@@ -56,6 +56,8 @@ void iio_buffer_free_sysfs_and_mask(struct iio_dev *indio_dev);
 #define iio_buffer_poll_addr (&iio_buffer_poll)
 #define iio_buffer_read_outer_addr (&iio_buffer_read_outer)
 
+void iio_device_buffers_put(struct iio_dev *indio_dev);
+
 void iio_disable_all_buffers(struct iio_dev *indio_dev);
 void iio_buffer_wakeup_poll(struct iio_dev *indio_dev);
 long iio_buffer_ioctl(struct iio_dev *indio_dev, struct file *filp,
@@ -76,6 +78,8 @@ static inline int iio_buffer_alloc_sysfs_and_mask(struct iio_dev *indio_dev)
 }
 
 static inline void iio_buffer_free_sysfs_and_mask(struct iio_dev *indio_dev) {}
+
+static inline void iio_device_buffers_put(struct iio_dev *indio_dev) {}
 
 static inline void iio_disable_all_buffers(struct iio_dev *indio_dev) {}
 static inline void iio_buffer_wakeup_poll(struct iio_dev *indio_dev) {}
