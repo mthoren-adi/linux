@@ -1554,25 +1554,13 @@ static struct attribute *iio_buffer_attrs[] = {
 	&dev_attr_data_available.attr,
 };
 
-int iio_buffer_alloc_sysfs_and_mask(struct iio_dev *indio_dev)
+static int __iio_buffer_alloc_sysfs_and_mask(struct iio_buffer *buffer)
 {
+	struct iio_dev *indio_dev = buffer->indio_dev;
 	struct iio_dev_attr *p;
 	struct attribute **attr;
-	struct iio_buffer *buffer = indio_dev->buffer;
 	int ret, i, attrn, attrcount, attrcount_orig = 0;
 	const struct iio_chan_spec *channels;
-
-	channels = indio_dev->channels;
-	if (channels) {
-		int ml = indio_dev->masklength;
-
-		for (i = 0; i < indio_dev->num_channels; i++)
-			ml = max(ml, channels[i].scan_index + 1);
-		indio_dev->masklength = ml;
-	}
-
-	if (!buffer)
-		return 0;
 
 	attrcount = 0;
 	if (buffer->attrs) {
@@ -1653,6 +1641,35 @@ error_cleanup_dynamic:
 	return ret;
 }
 
+int iio_buffer_alloc_sysfs_and_mask(struct iio_dev *indio_dev)
+{
+	struct iio_buffer *buffer = indio_dev->buffer;
+	const struct iio_chan_spec *channels;
+	int i;
+
+	channels = indio_dev->channels;
+	if (channels) {
+		int ml = indio_dev->masklength;
+
+		for (i = 0; i < indio_dev->num_channels; i++)
+			ml = max(ml, channels[i].scan_index + 1);
+		indio_dev->masklength = ml;
+	}
+
+	if (!buffer)
+		return 0;
+
+	return __iio_buffer_alloc_sysfs_and_mask(buffer);
+}
+
+static void __iio_buffer_free_sysfs_and_mask(struct iio_buffer *buffer)
+{
+	iio_buffer_free_scanmask(buffer);
+	kfree(buffer->buffer_group.attrs);
+	kfree(buffer->scan_el_group.attrs);
+	iio_free_chan_devattr_list(&buffer->scan_el_dev_attr_list);
+}
+
 void iio_buffer_free_sysfs_and_mask(struct iio_dev *indio_dev)
 {
 	struct iio_buffer *buffer = indio_dev->buffer;
@@ -1660,10 +1677,7 @@ void iio_buffer_free_sysfs_and_mask(struct iio_dev *indio_dev)
 	if (!buffer)
 		return;
 
-	iio_buffer_free_scanmask(buffer);
-	kfree(buffer->buffer_group.attrs);
-	kfree(buffer->scan_el_group.attrs);
-	iio_free_chan_devattr_list(&buffer->scan_el_dev_attr_list);
+	__iio_buffer_free_sysfs_and_mask(buffer);
 }
 
 static const struct file_operations iio_buffer_in_fileops = {
