@@ -75,7 +75,7 @@
 			spi-cpha;
 			vref-supply = <&vref>;
 			adi,sync-in-gpios = <&gpio0 87 GPIO_ACTIVE_LOW>;
-			reset-gpios = <&gpio0 86 GPIO_ACTIVE_LOW>;
+			reset-gpios = <&gpio0 93 GPIO_ACTIVE_LOW>;
 			clocks = <&ad7768_1_mclk>;
 			clock-names = "mclk";
 			dmas = <&rx_dma 0>;
