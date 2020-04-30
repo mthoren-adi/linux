@@ -31,6 +31,8 @@
 #include <linux/iio/buffer_impl.h>
 #include <linux/iio/buffer-dma.h>
 #include <linux/iio/buffer-dmaengine.h>
+#include <linux/iio/kfifo_buf.h>
+
 
 #include "cf_axi_adc.h"
 
@@ -137,6 +139,15 @@ static int axiadc_configure_ring_stream(struct iio_dev *indio_dev,
 
 	indio_dev->modes |= INDIO_BUFFER_HARDWARE;
 	iio_device_attach_buffer(indio_dev, buffer);
+
+	buffer = iio_kfifo_allocate();
+        iio_device_attach_buffer(indio_dev, buffer);
+
+	buffer = iio_kfifo_allocate();
+        iio_device_attach_buffer(indio_dev, buffer);
+
+	buffer = iio_kfifo_allocate();
+        iio_device_attach_buffer(indio_dev, buffer);
 
 	return 0;
 }
