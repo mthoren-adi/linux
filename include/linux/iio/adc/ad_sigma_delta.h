@@ -73,6 +73,7 @@ struct ad_sigma_delta {
 	bool			keep_cs_asserted;
 
 	uint8_t			comm;
+	struct mutex		lock;
 
 	const struct ad_sigma_delta_info *info;
 
