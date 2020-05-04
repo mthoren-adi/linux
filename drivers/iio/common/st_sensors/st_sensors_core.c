@@ -369,6 +369,9 @@ int st_sensors_init_sensor(struct iio_dev *indio_dev,
 	struct st_sensors_platform_data *of_pdata;
 	int err = 0;
 
+
+	mutex_init(&sdata->lock);
+
 	/* If OF/DT pdata exists, it will take precedence of anything else */
 	of_pdata = st_sensors_dev_probe(indio_dev->dev.parent, pdata);
 	if (IS_ERR(of_pdata))
@@ -557,7 +560,7 @@ int st_sensors_read_info_raw(struct iio_dev *indio_dev,
 	int err;
 	struct st_sensor_data *sdata = iio_priv(indio_dev);
 
-	mutex_lock(&indio_dev->mlock);
+	mutex_lock(&sdata->lock);
 	if (indio_dev->currentmode == INDIO_BUFFER_TRIGGERED) {
 		err = -EBUSY;
 		goto out;
@@ -576,7 +579,7 @@ int st_sensors_read_info_raw(struct iio_dev *indio_dev,
 		err = st_sensors_set_enable(indio_dev, false);
 	}
 out:
-	mutex_unlock(&indio_dev->mlock);
+	mutex_unlock(&sdata->lock);
 
 	return err;
 }
@@ -649,7 +652,7 @@ ssize_t st_sensors_sysfs_sampling_frequency_avail(struct device *dev,
 	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct st_sensor_data *sdata = iio_priv(indio_dev);
 
-	mutex_lock(&indio_dev->mlock);
+	mutex_lock(&sdata->lock);
 	for (i = 0; i < ST_SENSORS_ODR_LIST_MAX; i++) {
 		if (sdata->sensor_settings->odr.odr_avl[i].hz == 0)
 			break;
@@ -657,7 +660,7 @@ ssize_t st_sensors_sysfs_sampling_frequency_avail(struct device *dev,
 		len += scnprintf(buf + len, PAGE_SIZE - len, "%d ",
 				sdata->sensor_settings->odr.odr_avl[i].hz);
 	}
-	mutex_unlock(&indio_dev->mlock);
+	mutex_unlock(&sdata->lock);
 	buf[len - 1] = '\n';
 
 	return len;
@@ -671,7 +674,7 @@ ssize_t st_sensors_sysfs_scale_avail(struct device *dev,
 	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct st_sensor_data *sdata = iio_priv(indio_dev);
 
-	mutex_lock(&indio_dev->mlock);
+	mutex_lock(&sdata->lock);
 	for (i = 0; i < ST_SENSORS_FULLSCALE_AVL_MAX; i++) {
 		if (sdata->sensor_settings->fs.fs_avl[i].num == 0)
 			break;
@@ -681,7 +684,7 @@ ssize_t st_sensors_sysfs_scale_avail(struct device *dev,
 
 		len += scnprintf(buf + len, PAGE_SIZE - len, "%u.%06u ", q, r);
 	}
-	mutex_unlock(&indio_dev->mlock);
+	mutex_unlock(&sdata->lock);
 	buf[len - 1] = '\n';
 
 	return len;
