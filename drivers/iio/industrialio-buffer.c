@@ -1477,8 +1477,6 @@ done:
 	return (ret < 0) ? ret : len;
 }
 
-static const char * const iio_scan_elements_group_name = "scan_elements";
-
 static ssize_t iio_buffer_show_watermark(struct device *dev,
 					 struct device_attribute *attr,
 					 char *buf)
@@ -1554,7 +1552,7 @@ static struct attribute *iio_buffer_attrs[] = {
 	&dev_attr_data_available.attr,
 };
 
-static int __iio_buffer_alloc_sysfs_and_mask(struct iio_buffer *buffer)
+static int iio_buffer_alloc_sysfs_and_mask(struct iio_buffer *buffer)
 {
 	struct iio_dev *indio_dev = buffer->indio_dev;
 	struct iio_dev_attr *p;
@@ -1586,10 +1584,9 @@ static int __iio_buffer_alloc_sysfs_and_mask(struct iio_buffer *buffer)
 
 	attr[attrcount + ARRAY_SIZE(iio_buffer_attrs)] = NULL;
 
-	buffer->buffer_group.name = "buffer";
 	buffer->buffer_group.attrs = attr;
 
-	indio_dev->groups[indio_dev->groupcounter++] = &buffer->buffer_group;
+	buffer->groups[0] = &buffer->buffer_group;
 
 	attrcount = 0;
 	INIT_LIST_HEAD(&buffer->scan_el_dev_attr_list);
@@ -1615,7 +1612,7 @@ static int __iio_buffer_alloc_sysfs_and_mask(struct iio_buffer *buffer)
 			goto error_cleanup_dynamic;
 	}
 
-	buffer->scan_el_group.name = iio_scan_elements_group_name;
+	buffer->scan_el_group.name = "scan_elements";
 
 	buffer->scan_el_group.attrs = kcalloc(attrcount + 1,
 					      sizeof(buffer->scan_el_group.attrs[0]),
@@ -1628,7 +1625,7 @@ static int __iio_buffer_alloc_sysfs_and_mask(struct iio_buffer *buffer)
 
 	list_for_each_entry(p, &buffer->scan_el_dev_attr_list, l)
 		buffer->scan_el_group.attrs[attrn++] = &p->dev_attr.attr;
-	indio_dev->groups[indio_dev->groupcounter++] = &buffer->scan_el_group;
+	buffer->groups[1] = &buffer->scan_el_group;
 
 	return 0;
 
@@ -1641,11 +1638,66 @@ error_cleanup_dynamic:
 	return ret;
 }
 
-int iio_buffer_alloc_sysfs_and_mask(struct iio_dev *indio_dev)
+static void iio_buffer_free_sysfs_and_mask(struct iio_buffer *buffer)
+{
+	iio_buffer_free_scanmask(buffer);
+	kfree(buffer->buffer_group.attrs);
+	kfree(buffer->scan_el_group.attrs);
+	iio_free_chan_devattr_list(&buffer->scan_el_dev_attr_list);
+}
+
+static int iio_device_buffer_init(struct iio_dev *indio_dev,
+				  struct iio_buffer *buffer,
+				  int index)
+{
+	int ret;
+
+	ret = iio_buffer_alloc_sysfs_and_mask(buffer);
+	if (ret)
+		return ret;
+
+	ret = iio_device_alloc_chrdev_id(&buffer->dev);
+	if (ret)
+		goto error_free_sysfs_and_mask;
+
+	buffer->dev.parent = &indio_dev->dev;
+	buffer->dev.groups = buffer->groups;
+	buffer->dev.bus = &iio_bus_type;
+	device_initialize(&buffer->dev);
+
+	dev_set_name(&buffer->dev, "iio:buffer%d:%d",
+		     indio_dev->id, index);
+
+	ret = cdev_device_add(&buffer->chrdev, &buffer->dev);
+	if (ret)
+		goto error_free_chrdev_id;
+
+	return 0;
+
+error_free_chrdev_id:
+	iio_device_free_chrdev_id(&buffer->dev);
+error_free_sysfs_and_mask:
+	iio_buffer_free_sysfs_and_mask(buffer);
+	return ret;
+}
+
+void iio_device_buffer_cleanup(struct iio_buffer *buffer)
+{
+	if (!buffer)
+		return;
+
+	iio_buffer_free_sysfs_and_mask(buffer);
+
+	cdev_device_del(&buffer->chrdev, &buffer->dev);
+
+	iio_device_free_chrdev_id(&buffer->dev);
+}
+
+int iio_device_buffers_init(struct iio_dev *indio_dev)
 {
 	struct iio_buffer *buffer = indio_dev->buffer;
 	const struct iio_chan_spec *channels;
-	int i;
+	int i, ret;
 
 	channels = indio_dev->channels;
 	if (channels) {
@@ -1659,25 +1711,29 @@ int iio_buffer_alloc_sysfs_and_mask(struct iio_dev *indio_dev)
 	if (!buffer)
 		return 0;
 
-	return __iio_buffer_alloc_sysfs_and_mask(buffer);
+	ret = iio_device_buffer_init(indio_dev, buffer, 0);
+	if (ret)
+		return ret;
+
+	ret = sysfs_create_link(&indio_dev->dev.kobj,
+				&buffer->dev.kobj, "buffer");
+	if (ret)
+		goto error_cleanup_buffers;
+
+	return 0;
+
+error_cleanup_buffers:
+	iio_device_buffer_cleanup(buffer);
+	return 0;
 }
 
-static void __iio_buffer_free_sysfs_and_mask(struct iio_buffer *buffer)
-{
-	iio_buffer_free_scanmask(buffer);
-	kfree(buffer->buffer_group.attrs);
-	kfree(buffer->scan_el_group.attrs);
-	iio_free_chan_devattr_list(&buffer->scan_el_dev_attr_list);
-}
-
-void iio_buffer_free_sysfs_and_mask(struct iio_dev *indio_dev)
+void iio_device_buffers_cleanup(struct iio_dev *indio_dev)
 {
 	struct iio_buffer *buffer = indio_dev->buffer;
 
-	if (!buffer)
-		return;
+	sysfs_remove_link(&indio_dev->dev.kobj, "buffer");
 
-	__iio_buffer_free_sysfs_and_mask(buffer);
+	iio_device_buffer_cleanup(buffer);
 }
 
 static const struct file_operations iio_buffer_in_fileops = {

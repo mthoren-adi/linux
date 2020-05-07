@@ -151,6 +151,12 @@ struct iio_buffer {
 	unsigned int watermark;
 
 	/* private: */
+	/* @dev: underlying device object. */
+	struct device dev;
+
+#define IIO_BUFFER_MAX_GROUP	2
+	const struct attribute_group *groups[IIO_BUFFER_MAX_GROUP + 1];
+
 	/* @scan_timestamp: Does the scan mode include a timestamp. */
 	bool scan_timestamp;
 

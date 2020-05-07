@@ -57,10 +57,13 @@ ssize_t iio_format_value(char *buf, unsigned int type, int size, int *vals);
 #ifdef CONFIG_IIO_BUFFER
 struct poll_table_struct;
 
+int iio_device_alloc_chrdev_id(struct device *dev);
+void iio_device_free_chrdev_id(struct device *dev);
+
 void iio_device_buffer_attach_chrdev(struct iio_dev *indio_dev);
 
-int iio_buffer_alloc_sysfs_and_mask(struct iio_dev *indio_dev);
-void iio_buffer_free_sysfs_and_mask(struct iio_dev *indio_dev);
+int iio_device_buffers_init(struct iio_dev *indio_dev);
+void iio_device_buffers_cleanup(struct iio_dev *indio_dev);
 
 void iio_device_buffers_put(struct iio_dev *indio_dev);
 
@@ -71,12 +74,12 @@ void iio_buffer_wakeup_poll(struct iio_dev *indio_dev);
 
 static inline void iio_device_buffer_attach_chrdev(struct iio_dev *indio_dev) {}
 
-static inline int iio_buffer_alloc_sysfs_and_mask(struct iio_dev *indio_dev)
+static inline int iio_device_buffers_init(struct iio_dev *indio_dev)
 {
 	return 0;
 }
 
-static inline void iio_buffer_free_sysfs_and_mask(struct iio_dev *indio_dev) {}
+static inline void iio_device_buffers_cleanup(struct iio_dev *indio_dev) {}
 
 static inline void iio_device_buffers_put(struct iio_dev *indio_dev) {}
 

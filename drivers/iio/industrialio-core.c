@@ -1658,7 +1658,7 @@ static int iio_check_unique_scan_index(struct iio_dev *indio_dev)
 	return 0;
 }
 
-static int iio_device_alloc_chrdev_id(struct device *dev)
+int iio_device_alloc_chrdev_id(struct device *dev)
 {
 	int id;
 
@@ -1674,7 +1674,7 @@ static int iio_device_alloc_chrdev_id(struct device *dev)
 	return 0;
 }
 
-static void iio_device_free_chrdev_id(struct device *dev)
+void iio_device_free_chrdev_id(struct device *dev)
 {
 	if (!dev->devt)
 		return;
@@ -1704,18 +1704,11 @@ int __iio_device_register(struct iio_dev *indio_dev, struct module *this_mod)
 
 	iio_device_register_debugfs(indio_dev);
 
-	ret = iio_buffer_alloc_sysfs_and_mask(indio_dev);
-	if (ret) {
-		dev_err(indio_dev->dev.parent,
-			"Failed to create buffer sysfs interfaces\n");
-		goto error_unreg_debugfs;
-	}
-
 	ret = iio_device_register_sysfs(indio_dev);
 	if (ret) {
 		dev_err(indio_dev->dev.parent,
 			"Failed to register sysfs interfaces\n");
-		goto error_buffer_free_sysfs;
+		goto error_unreg_debugfs;
 	}
 	ret = iio_device_register_eventset(indio_dev);
 	if (ret) {
@@ -1731,6 +1724,26 @@ int __iio_device_register(struct iio_dev *indio_dev, struct module *this_mod)
 		indio_dev->setup_ops = &noop_ring_setup_ops;
 
 	iio_device_buffer_attach_chrdev(indio_dev);
+
+	if (indio_dev->chrdev) {
+		ret = device_add(&indio_dev->dev);
+
+		if (ret) {
+			put_device(&indio_dev->dev);
+			goto error_unreg_eventset;
+		}
+
+		ret = iio_device_buffers_init(indio_dev);
+		if (ret) {
+			device_del(&indio_dev->dev);
+
+			dev_err(indio_dev->dev.parent,
+				"Failed to create buffer sysfs interfaces\n");
+			goto error_unreg_eventset;
+		}
+
+		return 0;
+	}
 
 	/* No chrdev attached from buffer, we go with event-only chrdev */
 	if (!indio_dev->chrdev)
@@ -1756,8 +1769,6 @@ error_unreg_eventset:
 	iio_device_unregister_eventset(indio_dev);
 error_free_sysfs:
 	iio_device_unregister_sysfs(indio_dev);
-error_buffer_free_sysfs:
-	iio_buffer_free_sysfs_and_mask(indio_dev);
 error_unreg_debugfs:
 	iio_device_unregister_debugfs(indio_dev);
 	return ret;
@@ -1771,6 +1782,8 @@ EXPORT_SYMBOL(__iio_device_register);
 void iio_device_unregister(struct iio_dev *indio_dev)
 {
 	struct iio_ioctl_handler *h, *t;
+
+	iio_device_buffers_cleanup(indio_dev);
 
 	cdev_device_del(indio_dev->chrdev, &indio_dev->dev);
 	iio_device_free_chrdev_id(&indio_dev->dev);
@@ -1790,8 +1803,6 @@ void iio_device_unregister(struct iio_dev *indio_dev)
 	iio_buffer_wakeup_poll(indio_dev);
 
 	mutex_unlock(&indio_dev->info_exist_lock);
-
-	iio_buffer_free_sysfs_and_mask(indio_dev);
 }
 EXPORT_SYMBOL(iio_device_unregister);
 
