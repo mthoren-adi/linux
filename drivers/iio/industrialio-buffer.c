@@ -37,6 +37,19 @@ static const char * const iio_endian_prefix[] = {
 	[IIO_LE] = "le",
 };
 
+struct iio_buffer *dev_to_iio_buffer(struct device *dev)
+{
+	return container_of(dev, struct iio_buffer, dev);
+}
+EXPORT_SYMBOL_GPL(dev_to_iio_buffer);
+
+struct iio_dev *iio_buffer_get_attached_iio_dev(struct iio_buffer *buffer)
+{
+	return buffer ? NULL : buffer->indio_dev;
+}
+EXPORT_SYMBOL_GPL(iio_buffer_get_attached_iio_dev);
+
+
 static bool iio_buffer_is_active(struct iio_buffer *buf)
 {
 	return !list_empty(&buf->buffer_list);
@@ -398,9 +411,8 @@ static ssize_t iio_scan_el_show(struct device *dev,
 				struct device_attribute *attr,
 				char *buf)
 {
+	struct iio_buffer *buffer = dev_to_iio_buffer(dev);
 	int ret;
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
-	struct iio_buffer *buffer = indio_dev->buffer;
 
 	/* Ensure ret is 0 or 1. */
 	ret = !!test_bit(to_iio_dev_attr(attr)->address,
@@ -522,10 +534,10 @@ static ssize_t iio_scan_el_store(struct device *dev,
 				 const char *buf,
 				 size_t len)
 {
+	struct iio_buffer *buffer = dev_to_iio_buffer(dev);
+	struct iio_dev *indio_dev = buffer->indio_dev;
 	int ret;
 	bool state;
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
-	struct iio_buffer *buffer = indio_dev->buffer;
 	struct iio_dev_attr *this_attr = to_iio_dev_attr(attr);
 
 	ret = strtobool(buf, &state);
@@ -560,8 +572,7 @@ static ssize_t iio_scan_el_ts_show(struct device *dev,
 				   struct device_attribute *attr,
 				   char *buf)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
-	struct iio_buffer *buffer = indio_dev->buffer;
+	struct iio_buffer *buffer = dev_to_iio_buffer(dev);
 
 	return sprintf(buf, "%d\n", buffer->scan_timestamp);
 }
@@ -571,9 +582,9 @@ static ssize_t iio_scan_el_ts_store(struct device *dev,
 				    const char *buf,
 				    size_t len)
 {
+	struct iio_buffer *buffer = dev_to_iio_buffer(dev);
+	struct iio_dev *indio_dev = buffer->indio_dev;
 	int ret;
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
-	struct iio_buffer *buffer = indio_dev->buffer;
 	bool state;
 
 	ret = strtobool(buf, &state);
@@ -650,8 +661,7 @@ static ssize_t iio_buffer_read_length(struct device *dev,
 				      struct device_attribute *attr,
 				      char *buf)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
-	struct iio_buffer *buffer = indio_dev->buffer;
+	struct iio_buffer *buffer = dev_to_iio_buffer(dev);
 
 	return sprintf(buf, "%d\n", buffer->length);
 }
@@ -660,8 +670,8 @@ static ssize_t iio_buffer_write_length(struct device *dev,
 				       struct device_attribute *attr,
 				       const char *buf, size_t len)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
-	struct iio_buffer *buffer = indio_dev->buffer;
+	struct iio_buffer *buffer = dev_to_iio_buffer(dev);
+	struct iio_dev *indio_dev = buffer->indio_dev;
 	unsigned int val;
 	int ret;
 
@@ -693,8 +703,7 @@ static ssize_t iio_buffer_show_enable(struct device *dev,
 				      struct device_attribute *attr,
 				      char *buf)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
-	struct iio_buffer *buffer = indio_dev->buffer;
+	struct iio_buffer *buffer = dev_to_iio_buffer(dev);
 
 	return sprintf(buf, "%d\n", iio_buffer_is_active(buffer));
 }
@@ -1449,10 +1458,10 @@ static ssize_t iio_buffer_store_enable(struct device *dev,
 				       const char *buf,
 				       size_t len)
 {
+	struct iio_buffer *buffer = dev_to_iio_buffer(dev);
+	struct iio_dev *indio_dev = buffer->indio_dev;
 	int ret;
 	bool requested_state;
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
-	struct iio_buffer *buffer = indio_dev->buffer;
 	bool inlist;
 
 	ret = strtobool(buf, &requested_state);
@@ -1481,8 +1490,7 @@ static ssize_t iio_buffer_show_watermark(struct device *dev,
 					 struct device_attribute *attr,
 					 char *buf)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
-	struct iio_buffer *buffer = indio_dev->buffer;
+	struct iio_buffer *buffer = dev_to_iio_buffer(dev);
 
 	return sprintf(buf, "%u\n", buffer->watermark);
 }
@@ -1492,8 +1500,8 @@ static ssize_t iio_buffer_store_watermark(struct device *dev,
 					  const char *buf,
 					  size_t len)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
-	struct iio_buffer *buffer = indio_dev->buffer;
+	struct iio_buffer *buffer = dev_to_iio_buffer(dev);
+	struct iio_dev *indio_dev = buffer->indio_dev;
 	unsigned int val;
 	int ret;
 
@@ -1526,8 +1534,7 @@ static ssize_t iio_dma_show_data_available(struct device *dev,
 						struct device_attribute *attr,
 						char *buf)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
-	struct iio_buffer *buffer = indio_dev->buffer;
+	struct iio_buffer *buffer = dev_to_iio_buffer(dev);
 
 	return sprintf(buf, "%zu\n", iio_buffer_data_available(buffer));
 }

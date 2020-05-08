@@ -972,7 +972,8 @@ static ssize_t adxl372_get_fifo_enabled(struct device *dev,
 					  struct device_attribute *attr,
 					  char *buf)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct iio_buffer *buffer = dev_to_iio_buffer(dev);
+	struct iio_dev *indio_dev = iio_buffer_get_attached_iio_dev(buffer);
 	struct adxl372_state *st = iio_priv(indio_dev);
 
 	return sprintf(buf, "%d\n", st->fifo_mode);
@@ -982,7 +983,8 @@ static ssize_t adxl372_get_fifo_watermark(struct device *dev,
 					  struct device_attribute *attr,
 					  char *buf)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct iio_buffer *buffer = dev_to_iio_buffer(dev);
+	struct iio_dev *indio_dev = iio_buffer_get_attached_iio_dev(buffer);
 	struct adxl372_state *st = iio_priv(indio_dev);
 
 	return sprintf(buf, "%d\n", st->watermark);

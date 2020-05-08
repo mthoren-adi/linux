@@ -14,6 +14,9 @@
 
 struct iio_buffer;
 
+struct iio_buffer *dev_to_iio_buffer(struct device *dev);
+struct iio_dev *iio_buffer_get_attached_iio_dev(struct iio_buffer *buffer);
+
 void iio_buffer_set_attrs(struct iio_buffer *buffer,
 			 const struct attribute **attrs);
 

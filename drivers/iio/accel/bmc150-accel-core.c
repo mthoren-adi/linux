@@ -770,7 +770,8 @@ static ssize_t bmc150_accel_get_fifo_watermark(struct device *dev,
 					       struct device_attribute *attr,
 					       char *buf)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct iio_buffer *buffer = dev_to_iio_buffer(dev);
+	struct iio_dev *indio_dev = iio_buffer_get_attached_iio_dev(buffer);
 	struct bmc150_accel_data *data = iio_priv(indio_dev);
 	int wm;
 
@@ -785,7 +786,8 @@ static ssize_t bmc150_accel_get_fifo_state(struct device *dev,
 					   struct device_attribute *attr,
 					   char *buf)
 {
-	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct iio_buffer *buffer = dev_to_iio_buffer(dev);
+	struct iio_dev *indio_dev = iio_buffer_get_attached_iio_dev(buffer);
 	struct bmc150_accel_data *data = iio_priv(indio_dev);
 	bool state;
 
