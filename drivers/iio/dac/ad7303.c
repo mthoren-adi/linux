@@ -313,7 +313,7 @@ static int ad7303_probe(struct spi_device *spi)
 	indio_dev->modes = INDIO_DIRECT_MODE;
 	indio_dev->channels = ad7303_channels;
 	indio_dev->num_channels = ARRAY_SIZE(ad7303_channels);
-	indio_dev->direction = IIO_DEVICE_DIRECTION_OUT;
+	//indio_dev->direction = IIO_DEVICE_DIRECTION_OUT;
 
 	ret = iio_triggered_buffer_setup(indio_dev, NULL,
 		&ad7303_trigger_handler, NULL);

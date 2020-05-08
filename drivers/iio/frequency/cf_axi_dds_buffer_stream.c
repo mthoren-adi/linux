@@ -92,10 +92,10 @@ int cf_axi_dds_configure_buffer(struct iio_dev *indio_dev)
 	if (IS_ERR(buffer))
 		return PTR_ERR(buffer);
 
-	iio_device_attach_buffer(indio_dev, buffer);
+	iio_device_attach_buffer_dir(indio_dev, buffer,
+				     IIO_BUFFER_DIRECTION_OUT);
 
 	indio_dev->modes |= INDIO_BUFFER_HARDWARE;
-	indio_dev->direction = IIO_DEVICE_DIRECTION_OUT;
 	indio_dev->setup_ops = &dds_buffer_setup_ops;
 
 	return 0;

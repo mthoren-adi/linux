@@ -459,7 +459,7 @@ static int m2k_dac_alloc_channel(struct platform_device *pdev,
 	indio_dev->dev.parent = &pdev->dev;
 	indio_dev->name = m2k_dac_ch_dev_names[num];
 	indio_dev->modes = INDIO_DIRECT_MODE | INDIO_BUFFER_HARDWARE;
-	indio_dev->direction = IIO_DEVICE_DIRECTION_OUT;
+//	indio_dev->direction = IIO_DEVICE_DIRECTION_OUT;
 	indio_dev->setup_ops = &m2k_dac_buffer_setup_ops;
 	indio_dev->info = &m2k_dac_ch_info;
 	indio_dev->channels = &m2k_dac_channel_info;

@@ -123,9 +123,9 @@ static int m2k_la_txrx_read_raw(struct iio_dev *indio_dev,
 	struct m2k_la *m2k_la = iio_device_get_drvdata(indio_dev);
 	unsigned int div, reg;
 
-	if (indio_dev->direction == IIO_DEVICE_DIRECTION_IN)
-		reg = M2K_LA_REG_DIVIDER_LA;
-	else
+//	if (indio_dev->direction == IIO_DEVICE_DIRECTION_IN)
+//		reg = M2K_LA_REG_DIVIDER_LA;
+//	else
 		reg = M2K_LA_REG_DIVIDER_PG;
 
 	div = m2k_la_read(m2k_la, reg) + 1;
@@ -145,9 +145,9 @@ static int m2k_la_txrx_write_raw(struct iio_dev *indio_dev,
 		val = 1;
 
 	div = DIV_ROUND_UP(clk_get_rate(m2k_la->clk), val);
-	if (indio_dev->direction == IIO_DEVICE_DIRECTION_IN)
-		reg = M2K_LA_REG_DIVIDER_LA;
-	else
+//	if (indio_dev->direction == IIO_DEVICE_DIRECTION_IN)
+//		reg = M2K_LA_REG_DIVIDER_LA;
+//	else
 		reg = M2K_LA_REG_DIVIDER_PG;
 
 	m2k_la_write(m2k_la, reg, div - 1);
@@ -718,12 +718,12 @@ static int m2k_la_submit_block(struct iio_dma_buffer_queue *queue,
 {
 	struct iio_dev *indio_dev = queue->driver_data;
 
-	if (indio_dev->direction == IIO_DEVICE_DIRECTION_IN) {
+//	if (indio_dev->direction == IIO_DEVICE_DIRECTION_IN) {
 		block->block.bytes_used = block->block.size;
-		iio_dmaengine_buffer_submit_block(queue, block, DMA_DEV_TO_MEM);
-	} else {
+//		iio_dmaengine_buffer_submit_block(queue, block, DMA_DEV_TO_MEM);
+//	} else {
 		iio_dmaengine_buffer_submit_block(queue, block, DMA_MEM_TO_DEV);
-	}
+//	}
 
 	return 0;
 }
@@ -862,7 +862,7 @@ static int m2k_la_probe(struct platform_device *pdev)
 	indio_dev_tx->info = &m2k_la_txrx_iio_info;
 	indio_dev_tx->channels = m2k_la_tx_chan_spec,
 	indio_dev_tx->num_channels = ARRAY_SIZE(m2k_la_tx_chan_spec);
-	indio_dev_tx->direction = IIO_DEVICE_DIRECTION_OUT;
+//	indio_dev_tx->direction = IIO_DEVICE_DIRECTION_OUT;
 	indio_dev_tx->setup_ops = &m2k_la_tx_setup_ops;
 
 	buffer_tx = iio_dmaengine_buffer_alloc(&pdev->dev, "tx",
