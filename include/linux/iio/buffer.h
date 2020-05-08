@@ -14,6 +14,11 @@
 
 struct iio_buffer;
 
+enum iio_buffer_direction {
+	IIO_BUFFER_DIRECTION_IN,
+	IIO_BUFFER_DIRECTION_OUT,
+};
+
 struct iio_buffer *dev_to_iio_buffer(struct device *dev);
 struct iio_dev *iio_buffer_get_attached_iio_dev(struct iio_buffer *buffer);
 
@@ -52,7 +57,11 @@ static inline int iio_push_to_buffers_with_timestamp(struct iio_dev *indio_dev,
 bool iio_validate_scan_mask_onehot(struct iio_dev *indio_dev,
 				   const unsigned long *mask);
 
-void iio_device_attach_buffer(struct iio_dev *indio_dev,
-			      struct iio_buffer *buffer);
+void iio_device_attach_buffer_dir(struct iio_dev *indio_dev,
+				  struct iio_buffer *buffer,
+				  enum iio_buffer_direction direction);
+
+#define iio_device_attach_buffer(indio_dev, buffer)	\
+	iio_device_attach_buffer_dir(indio_dev, buffer, IIO_BUFFER_DIRECTION_IN)
 
 #endif /* _IIO_BUFFER_GENERIC_H_ */

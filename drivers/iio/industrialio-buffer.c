@@ -237,12 +237,12 @@ static __poll_t iio_buffer_poll(struct file *filp,
 
 	poll_wait(filp, &rb->pollq, wait);
 
-	switch (indio_dev->direction) {
-	case IIO_DEVICE_DIRECTION_IN:
+	switch (rb->direction) {
+	case IIO_BUFFER_DIRECTION_IN:
 		if (iio_buffer_ready(indio_dev, rb, rb->watermark, 0))
 			return EPOLLIN | EPOLLRDNORM;
 		break;
-	case IIO_DEVICE_DIRECTION_OUT:
+	case IIO_BUFFER_DIRECTION_OUT:
 		if (iio_buffer_space_available(rb))
 			return EPOLLOUT | EPOLLWRNORM;
 	}
@@ -907,7 +907,7 @@ static int iio_verify_update(struct iio_dev *indio_dev,
 		return -EINVAL;
 	}
 
-	if (indio_dev->direction == IIO_DEVICE_DIRECTION_OUT)
+	if (buffer->direction == IIO_BUFFER_DIRECTION_OUT)
 		strict_scanmask = true;
 
 	/* What scan mask do we actually have? */
@@ -1067,6 +1067,8 @@ static int iio_update_demux(struct iio_dev *indio_dev)
 	int ret;
 
 	list_for_each_entry(buffer, &indio_dev->buffer_list, buffer_list) {
+		if (buffer->direction != IIO_BUFFER_DIRECTION_IN)
+			continue;
 		ret = iio_buffer_update_demux(indio_dev, buffer);
 		if (ret < 0)
 			goto error_clear_mux_table;
@@ -1091,8 +1093,7 @@ static int iio_enable_buffers(struct iio_dev *indio_dev,
 	indio_dev->scan_bytes = config->scan_bytes;
 	indio_dev->currentmode = config->mode;
 
-	if (indio_dev->direction == IIO_DEVICE_DIRECTION_IN)
-		iio_update_demux(indio_dev);
+	iio_update_demux(indio_dev);
 
 	/* Wind up again */
 	if (indio_dev->setup_ops->preenable) {
@@ -1266,7 +1267,7 @@ int iio_update_buffers(struct iio_dev *indio_dev,
 	mutex_lock(&indio_dev->info_exist_lock);
 	mutex_lock(&indio_dev->mlock);
 
-	if (indio_dev->direction == IIO_DEVICE_DIRECTION_OUT) {
+	if (insert_buffer->direction == IIO_BUFFER_DIRECTION_OUT) {
 		ret = -EINVAL;
 		goto out_unlock;
 	}
@@ -1432,7 +1433,6 @@ static long iio_buffer_ioctl(struct file *filep, unsigned int cmd,
 static int iio_buffer_mmap(struct file *filep, struct vm_area_struct *vma)
 {
 	struct iio_buffer *buffer = filep->private_data;
-	struct iio_dev *indio_dev = buffer->indio_dev;
 
 	if (!buffer || !buffer->access || !buffer->access->mmap)
 		return -ENODEV;
@@ -1440,12 +1440,12 @@ static int iio_buffer_mmap(struct file *filep, struct vm_area_struct *vma)
 	if (!(vma->vm_flags & VM_SHARED))
 		return -EINVAL;
 
-	switch (indio_dev->direction) {
-	case IIO_DEVICE_DIRECTION_IN:
+	switch (buffer->direction) {
+	case IIO_BUFFER_DIRECTION_IN:
 		if (!(vma->vm_flags & VM_READ))
 			return -EINVAL;
 		break;
-	case IIO_DEVICE_DIRECTION_OUT:
+	case IIO_BUFFER_DIRECTION_OUT:
 		if (!(vma->vm_flags & VM_WRITE))
 			return -EINVAL;
 		break;
@@ -1887,7 +1887,7 @@ void iio_device_buffer_attach_chrdev(struct iio_dev *indio_dev)
 	if (!buffer)
 		return;
 
-	if (indio_dev->direction == IIO_DEVICE_DIRECTION_OUT)
+	if (buffer->direction == IIO_BUFFER_DIRECTION_OUT)
 		cdev_init(&buffer->chrdev, &iio_buffer_out_fileops);
 	else
 		cdev_init(&buffer->chrdev, &iio_buffer_in_fileops);
@@ -2024,15 +2024,18 @@ EXPORT_SYMBOL_GPL(iio_buffer_put);
  * iio_device_attach_buffer_dir - Attach a buffer to a IIO device direction
  * @indio_dev: The device the buffer should be attached to
  * @buffer: The buffer to attach to the device
+ * @direction: Direction of data (IIO_BUFFER_DIRECTION_IN/OUT)
  *
  * This function attaches a buffer to a IIO device. The buffer stays attached to
  * the device until the device is freed. The function should only be called at
  * most once per device.
  */
-void iio_device_attach_buffer(struct iio_dev *indio_dev,
-			      struct iio_buffer *buffer)
+void iio_device_attach_buffer_dir(struct iio_dev *indio_dev,
+				  struct iio_buffer *buffer,
+				  enum iio_buffer_direction direction)
 {
 	buffer = iio_buffer_get(buffer);
+	buffer->direction = direction;
 	buffer->indio_dev = indio_dev;
 
 	/* keep this for legacy */
@@ -2041,4 +2044,4 @@ void iio_device_attach_buffer(struct iio_dev *indio_dev,
 
 	list_add_tail(&buffer->attached_entry, &indio_dev->attached_buffers);
 }
-EXPORT_SYMBOL_GPL(iio_device_attach_buffer);
+EXPORT_SYMBOL_GPL(iio_device_attach_buffer_dir);

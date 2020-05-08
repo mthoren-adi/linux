@@ -271,7 +271,7 @@ static int iio_dma_buffer_fileio_alloc(struct iio_dma_buffer_queue *queue,
 	queue->fileio.active_block = block;
 	queue->fileio.pos = 0;
 
-	if (indio_dev->direction == IIO_DEVICE_DIRECTION_IN) {
+	if (queue->buffer.direction == IIO_BUFFER_DIRECTION_IN) {
 		list_add_tail(&block->head, &queue->incoming);
 		queue->poll_wakup_flags = POLLIN | POLLRDNORM;
 	} else {

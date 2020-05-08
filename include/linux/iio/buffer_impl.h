@@ -177,6 +177,8 @@ struct iio_buffer {
 	/* @demux_bounce: Buffer for doing gather from incoming scan. */
 	void *demux_bounce;
 
+	unsigned int direction;
+
 	/* @attached_buffers: Entry in the devices list of attached buffers. */
 	struct list_head attached_entry;
 
