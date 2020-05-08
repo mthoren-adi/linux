@@ -1532,6 +1532,7 @@ struct iio_dev *iio_device_alloc(int sizeof_priv)
 	}
 	dev_set_name(&dev->dev, "iio:device%d", dev->id);
 	INIT_LIST_HEAD(&dev->buffer_list);
+	INIT_LIST_HEAD(&dev->attached_buffers);
 	INIT_LIST_HEAD(&dev->ioctl_handlers);
 
 	return dev;

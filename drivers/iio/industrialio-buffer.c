@@ -310,12 +310,13 @@ static int iio_buffer_chrdev_release(struct inode *inode, struct file *filp)
  */
 void iio_buffer_wakeup_poll(struct iio_dev *indio_dev)
 {
-	struct iio_buffer *buffer = indio_dev->buffer;
+	struct iio_buffer *b;
 
-	if (!buffer)
+	if (list_empty(&indio_dev->attached_buffers))
 		return;
 
-	wake_up(&buffer->pollq);
+	list_for_each_entry(b, &indio_dev->attached_buffers, attached_entry)
+		wake_up(&b->pollq);
 }
 
 void iio_buffer_init(struct iio_buffer *buffer)
@@ -1324,10 +1325,10 @@ static int iio_buffer_query_block(struct iio_buffer *buffer,
 	return 0;
 }
 
-static int iio_buffer_dequeue_block(struct iio_dev *indio_dev,
+static int iio_buffer_dequeue_block(struct iio_buffer *buffer,
 	struct iio_buffer_block __user *user_block, bool non_blocking)
 {
-	struct iio_buffer *buffer = indio_dev->buffer;
+	struct iio_dev *indio_dev = buffer->indio_dev;
 	struct iio_buffer_block block;
 	int ret;
 
@@ -1421,7 +1422,7 @@ static long iio_buffer_ioctl(struct file *filep, unsigned int cmd,
 		return iio_buffer_enqueue_block(buffer,
 			(struct iio_buffer_block __user *)arg);
 	case IIO_BLOCK_DEQUEUE_IOCTL:
-		return iio_buffer_dequeue_block(buffer->indio_dev,
+		return iio_buffer_dequeue_block(buffer,
 			(struct iio_buffer_block __user *)arg, non_blocking);
 	default:
 		return iio_device_ioctl(buffer->indio_dev, filep, cmd, arg);
@@ -1789,10 +1790,27 @@ static int iio_device_link_legacy_folders(struct iio_dev *indio_dev,
 	return ret;
 }
 
+static void __iio_device_buffers_cleanup(struct iio_dev *indio_dev, int idx)
+{
+	struct iio_buffer *b;
+
+	if (list_empty(&indio_dev->attached_buffers))
+		return;
+
+	list_for_each_entry(b, &indio_dev->attached_buffers, attached_entry) {
+		if (idx == 0)
+			break;
+
+		iio_device_buffer_cleanup(b);
+		if (idx > 0)
+			idx--;
+	}
+}
+
 int iio_device_buffers_init(struct iio_dev *indio_dev)
 {
-	struct iio_buffer *buffer = indio_dev->buffer;
 	const struct iio_chan_spec *channels;
+	struct iio_buffer *b;
 	int i, ret;
 
 	channels = indio_dev->channels;
@@ -1804,32 +1822,38 @@ int iio_device_buffers_init(struct iio_dev *indio_dev)
 		indio_dev->masklength = ml;
 	}
 
-	if (!buffer)
+	if (list_empty(&indio_dev->attached_buffers))
 		return 0;
 
-	ret = iio_device_buffer_init(indio_dev, buffer, 0);
-	if (ret)
-		return ret;
+	i = 0;
+	list_for_each_entry(b, &indio_dev->attached_buffers, attached_entry) {
+		ret = iio_device_buffer_init(indio_dev, b, i);
+		if (ret)
+			goto error_buffers_cleanup;
 
-	ret = iio_device_link_legacy_folders(indio_dev, buffer);
-	if (ret)
-		goto error_buffers_cleanup;
+		if (i == 0) {
+			ret = iio_device_link_legacy_folders(indio_dev, b);
+			if (ret) {
+				iio_device_buffer_cleanup(b);
+				goto error_buffers_cleanup;
+			}
+		}
+		i++;
+	}
 
 	return 0;
 
 error_buffers_cleanup:
-	iio_device_buffer_cleanup(buffer);
-	return 0;
+	__iio_device_buffers_cleanup(indio_dev, i);
+	return ret;
 }
 
 void iio_device_buffers_cleanup(struct iio_dev *indio_dev)
 {
-	struct iio_buffer *buffer = indio_dev->buffer;
-
 	sysfs_remove_link(&indio_dev->dev.kobj, "buffer");
 	sysfs_remove_link(&indio_dev->dev.kobj, "scan_elements");
 
-	iio_device_buffer_cleanup(buffer);
+	__iio_device_buffers_cleanup(indio_dev, -1);
 }
 
 static const struct file_operations iio_buffer_in_fileops = {
@@ -1873,12 +1897,13 @@ void iio_device_buffer_attach_chrdev(struct iio_dev *indio_dev)
 
 void iio_device_buffers_put(struct iio_dev *indio_dev)
 {
-	struct iio_buffer *buffer = indio_dev->buffer;
+	struct iio_buffer *b;
 
-	if (!buffer)
+	if (list_empty(&indio_dev->attached_buffers))
 		return;
 
-	iio_buffer_put(buffer);
+	list_for_each_entry(b, &indio_dev->attached_buffers, attached_entry)
+		iio_buffer_put(b);
 }
 
 /**
@@ -1996,7 +2021,7 @@ void iio_buffer_put(struct iio_buffer *buffer)
 EXPORT_SYMBOL_GPL(iio_buffer_put);
 
 /**
- * iio_device_attach_buffer - Attach a buffer to a IIO device
+ * iio_device_attach_buffer_dir - Attach a buffer to a IIO device direction
  * @indio_dev: The device the buffer should be attached to
  * @buffer: The buffer to attach to the device
  *
@@ -2007,8 +2032,13 @@ EXPORT_SYMBOL_GPL(iio_buffer_put);
 void iio_device_attach_buffer(struct iio_dev *indio_dev,
 			      struct iio_buffer *buffer)
 {
-	indio_dev->buffer = iio_buffer_get(buffer);
+	buffer = iio_buffer_get(buffer);
+	buffer->indio_dev = indio_dev;
 
-	indio_dev->buffer->indio_dev = indio_dev;
+	/* keep this for legacy */
+	if (!indio_dev->buffer)
+		indio_dev->buffer = buffer;
+
+	list_add_tail(&buffer->attached_entry, &indio_dev->attached_buffers);
 }
 EXPORT_SYMBOL_GPL(iio_device_attach_buffer);

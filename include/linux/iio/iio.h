@@ -517,6 +517,7 @@ struct iio_buffer_setup_ops {
  * @event_interface:	[INTERN] event chrdevs associated with interrupt lines
  * @buffer:		[DRIVER] any buffer present
  * @buffer_list:	[INTERN] list of all buffers currently attached
+ * @attached_buffers:	[INTERN] list of all attached buffers
  * @scan_bytes:		[INTERN] num bytes captured to be fed to buffer demux
  * @mlock:		[DRIVER] lock used to prevent simultaneous device state
  *			changes
@@ -562,6 +563,7 @@ struct iio_dev {
 	enum iio_device_direction	direction;
 	struct iio_buffer		*buffer;
 	struct list_head		buffer_list;
+	struct list_head		attached_buffers;
 	int				scan_bytes;
 	struct mutex			mlock;
 
