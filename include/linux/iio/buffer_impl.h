@@ -154,7 +154,7 @@ struct iio_buffer {
 	/* @dev: underlying device object. */
 	struct device dev;
 
-#define IIO_BUFFER_MAX_GROUP	2
+#define IIO_BUFFER_MAX_GROUP	1
 	const struct attribute_group *groups[IIO_BUFFER_MAX_GROUP + 1];
 
 	/* @scan_timestamp: Does the scan mode include a timestamp. */
@@ -167,10 +167,9 @@ struct iio_buffer {
 	struct attribute_group buffer_group;
 
 	/*
-	 * @scan_el_group: Attribute group for those attributes not
-	 * created from the iio_chan_info array.
+	 * @scan_el_dir: kobject for the 'scan_elements' directory
 	 */
-	struct attribute_group scan_el_group;
+	struct kobject scan_el_dir;
 
 	/* @attrs: Standard attributes of the buffer. */
 	const struct attribute **attrs;
