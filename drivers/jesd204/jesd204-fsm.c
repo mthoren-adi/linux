@@ -157,12 +157,16 @@ static int jesd204_dev_propagate_cb_inputs(struct jesd204_dev *jdev,
 					   jesd204_propagated_cb propagated_cb,
 					   struct jesd204_fsm_data *data)
 {
+	struct jesd204_dev_top *jdev_top = data->jdev_top;
 	struct jesd204_dev_con_out *con = NULL;
 	unsigned int i;
 	int ret = 0;
 
 	for (i = 0; i < jdev->inputs_count; i++) {
 		con = jdev->inputs[i];
+
+		if (!jesd204_con_belongs_to_topology(con, jdev_top))
+			continue;
 
 		ret = jesd204_dev_propagate_cb_inputs(con->owner, ol,
 						      propagated_cb, data);
@@ -181,12 +185,16 @@ static int jesd204_dev_propagate_cb_outputs(struct jesd204_dev *jdev,
 					    jesd204_propagated_cb propagated_cb,
 					    struct jesd204_fsm_data *data)
 {
+	struct jesd204_dev_top *jdev_top = data->jdev_top;
 	struct jesd204_dev_con_out *con = NULL;
 	struct jesd204_dev_list_entry *e;
 	int ret = 0;
 
 	list_for_each_entry(con, &jdev->outputs, entry) {
 		list_for_each_entry(e, &con->dests, entry) {
+			if (!jesd204_con_belongs_to_topology(con, jdev_top))
+				continue;
+
 			ret = propagated_cb(e->jdev, ol, con, data);
 			if (ret)
 				goto done;
