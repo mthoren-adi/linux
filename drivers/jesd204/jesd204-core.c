@@ -77,6 +77,8 @@ static int jesd204_dev_alloc_links(struct jesd204_dev_top *jdev_top)
 
 	for (i = 0; i < jdev_top->num_links; i++) {
 		links[i].jdev_top = jdev_top;
+		links[i].link_idx = i;
+		links[i].link.link_id = jdev_top->link_ids[i];
 	}
 
 	jdev_top->active_links = links;

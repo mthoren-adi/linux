@@ -276,7 +276,8 @@ static int jesd204_dev_validate_cur_state(struct jesd204_dev *jdev,
 	if (state != ol->cur_state &&
 	    state != JESD204_STATE_DONT_CARE) {
 		dev_warn(jdev->parent,
-			 "invalid current jesd state: %s, exp: %s, nxt: %s\n",
+			 "JESD204 link[%u] invalid current state: %s, exp: %s, nxt: %s\n",
+			 ol->link_idx,
 			 jesd204_state_str(ol->cur_state),
 			 jesd204_state_str(state),
 			 jesd204_state_str(ol->nxt_state));
