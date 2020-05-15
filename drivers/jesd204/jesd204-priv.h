@@ -16,15 +16,7 @@ struct jesd204_dev;
 struct jesd204_dev_top;
 struct jesd204_link_opaque;
 struct jesd204_dev_con_out;
-
-typedef int (*jesd204_cb_ol_priv)(struct jesd204_dev *jdev,
-				  struct jesd204_link_opaque *ol,
-				  void *data);
-
-typedef int (*jesd204_cb_priv)(struct jesd204_dev *jdev,
-			       struct jesd204_link_opaque *ol,
-			       struct jesd204_dev_con_out *con,
-			       void *data);
+struct jesd204_fsm_data;
 
 enum jesd204_dev_state {
 	JESD204_STATE_ERROR = -1,
@@ -63,7 +55,9 @@ struct jesd204_dev_list_entry {
  * @topo_id		topology ID, that this connection belongs to
  *			(must match JESD204 top device)
  * @link_id		JESD204 link ID, that this connection belongs to
- *			(must match JESD204 top device)
+ *			(obtained from DT, must match a link ID in the top device)
+ * @link_idx		JESD204 link index in the list of link IDs of the top device
+ *			(computed at initialize)
  * @dests		list of JESD204 devices this connection is connected
  *			as input
  * @dests_count		number of connected JESD204 devices to this output
@@ -77,6 +71,7 @@ struct jesd204_dev_con_out {
 	struct jesd204_dev_top		*jdev_top;
 	unsigned int			topo_id;
 	unsigned int			link_id;
+	unsigned int			link_idx;
 	struct list_head		dests;
 	unsigned int			dests_count;
 	struct of_phandle_args		of;
@@ -132,27 +127,23 @@ struct jesd204_dev {
  * @link		public link information
  * @jdev_top		JESD204 top level this links belongs to
  * @link_idx		Index in the array of JESD204 links in @jdev_top
- * @fsm_complete_cb	callback for each JESD204 link state transition end
  * @cb_ref		kref which for each JESD204 link will increment when it
  *			needs to defer a state transition; an equivalent
  *			notification must be called by the device to decrement
  *			this and finally call the @fsm_complete_cbs
  *			callback (if provided)
- * @cb_data		pointer to private data used during a state transition
- * @nxt_state		next state for the JESD204 link
  * @cur_state		current state of the JESD204 link
- * @errors		error codes for the JESD204 link
+ * @fsm_data		reference to state-transition information
+ * @error		error codes for the JESD204 link
  */
 struct jesd204_link_opaque {
 	struct jesd204_link		link;
 	struct jesd204_dev_top		*jdev_top;
 	unsigned int			link_idx;
 
-	jesd204_cb_ol_priv		fsm_complete_cb;
 	struct kref			cb_ref;
-	void				*cb_data;
-	enum jesd204_dev_state		nxt_state;
-	enum jesd204_dev_state		cur_state;
+	enum jesd204_dev_state		state;
+	struct jesd204_fsm_data		*fsm_data;
 	int				error;
 };
 
