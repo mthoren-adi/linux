@@ -15,10 +15,15 @@ enum jesd204_sysref_mode {
 	JESD204_SYSREF_ONESHOT,
 };
 
+
+ /* NOTE: Need support for ASYNC link state notofications */
+
 enum jesd204_state_change_result {
 	JESD204_STATE_CHANGE_ERROR = -1,
 	JESD204_STATE_CHANGE_DEFER = 0,
 	JESD204_STATE_CHANGE_DONE,
+	JESD204_STATE_CHANGE_FAILED_REENBALE, /* 204C needs handshake, also 204AB needs ack - disable -> restart in enable phase (max timeout/retry?) */
+	JESD204_STATE_CHANGE_FAILED_RESTART, /*  204C needs handshake - restart from setup phase (max timeout/retry?) */
 };
 
 enum jesd204_subclass {
@@ -141,6 +146,8 @@ enum jesd204_dev_op {
 	JESD204_OP_CLOCKS_DISABLE,
 	JESD204_OP_LINK_SETUP,
 	JESD204_OP_LINK_ENABLE,
+	JESD204_OP_LINK_SYSREF,
+	JESD204_OP_LINK_VERIFY,
 	JESD204_OP_LINK_RUNNING,
 	JESD204_OP_LINK_DISABLE,
 	JESD204_OP_SYSREF,
