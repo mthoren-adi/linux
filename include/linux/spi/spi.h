@@ -21,6 +21,7 @@
 #include <linux/kthread.h>
 #include <linux/completion.h>
 #include <linux/scatterlist.h>
+#include <linux/gpio/consumer.h>
 
 struct dma_chan;
 struct property_entry;
@@ -125,7 +126,10 @@ void spi_statistics_add_transfer_stats(struct spi_statistics *stats,
  * @modalias: Name of the driver to use with this device, or an alias
  *	for that name.  This appears in the sysfs "modalias" attribute
  *	for driver coldplugging, and in uevents used for hotplugging
- * @cs_gpio: gpio number of the chipselect line (optional, -ENOENT when
+ * @cs_gpio: LEGACY: gpio number of the chipselect line (optional, -ENOENT when
+ *	not using a GPIO line) use cs_gpiod in new drivers by opting in on
+ *	the spi_master.
+ * @cs_gpiod: gpio descriptor of the chipselect line (optional, NULL when
  *	not using a GPIO line)
  *
  * @statistics: statistics for the spi_device
@@ -146,7 +150,7 @@ struct spi_device {
 	u32			max_speed_hz;
 	u8			chip_select;
 	u8			bits_per_word;
-	u16			mode;
+	u32			mode;
 #define	SPI_CPHA	0x01			/* clock phase */
 #define	SPI_CPOL	0x02			/* clock polarity */
 #define	SPI_MODE_0	(0|0)			/* (original MicroWire) */
@@ -163,11 +167,18 @@ struct spi_device {
 #define	SPI_TX_QUAD	0x200			/* transmit with 4 wires */
 #define	SPI_RX_DUAL	0x400			/* receive with 2 wires */
 #define	SPI_RX_QUAD	0x800			/* receive with 4 wires */
+#define	SPI_CS_WORD	0x1000			/* toggle cs after each word */
+#define	SPI_TX_OCTAL	0x2000			/* transmit with 8 wires */
+#define	SPI_RX_OCTAL	0x4000			/* receive with 8 wires */
+#define	SPI_NO_MOSI	0x8000			/* no transmit wire */
+#define	SPI_NO_MISO	0x10000			/* no receive wire */
 	int			irq;
 	void			*controller_state;
 	void			*controller_data;
 	char			modalias[SPI_NAME_SIZE];
-	int			cs_gpio;	/* chip select gpio */
+	const char		*driver_override;
+	int			cs_gpio;	/* LEGACY: chip select gpio */
+	struct gpio_desc	*cs_gpiod;	/* chip select gpio desc */
 
 	/* the statistics */
 	struct spi_statistics	statistics;
@@ -383,9 +394,17 @@ static inline void spi_unregister_driver(struct spi_driver *sdrv)
  *	     controller has native support for memory like operations.
  * @unprepare_message: undo any work done by prepare_message().
  * @slave_abort: abort the ongoing transfer request on an SPI slave controller
- * @cs_gpios: Array of GPIOs to use as chip select lines; one per CS
- *	number. Any individual value may be -ENOENT for CS lines that
+ * @cs_gpios: LEGACY: array of GPIO descs to use as chip select lines; one per
+ *	CS number. Any individual value may be -ENOENT for CS lines that
+ *	are not GPIOs (driven by the SPI controller itself). Use the cs_gpiods
+ *	in new drivers.
+ * @cs_gpiods: Array of GPIO descs to use as chip select lines; one per CS
+ *	number. Any individual value may be NULL for CS lines that
  *	are not GPIOs (driven by the SPI controller itself).
+ * @use_gpio_descriptors: Turns on the code in the SPI core to parse and grab
+ *	GPIO descriptors rather than using global GPIO numbers grabbed by the
+ *	driver. This will fill in @cs_gpiods and @cs_gpios should not be used,
+ *	and SPI devices will have the cs_gpiod assigned rather than cs_gpio.
  * @statistics: statistics for the spi_controller
  * @dma_tx: DMA transmit channel
  * @dma_rx: DMA receive channel
@@ -580,6 +599,8 @@ struct spi_controller {
 
 	/* gpio chip select */
 	int			*cs_gpios;
+	struct gpio_desc	**cs_gpiods;
+	bool			use_gpio_descriptors;
 
 	/* statistics */
 	struct spi_statistics	statistics;

@@ -6,6 +6,7 @@ dtbo-$(CONFIG_ARCH_BCM2835) += \
 	adau7002-simple.dtbo \
 	adau7118-simple.dtbo \
 	adis16475.dtbo \
+	adis16480.dtbo \
 	ads1015.dtbo \
 	ads1115.dtbo \
 	ads7846.dtbo \
@@ -133,6 +134,7 @@ dtbo-$(CONFIG_ARCH_BCM2835) += \
 	rpi-adf4371.dtbo \
 	rpi-ad5677r.dtbo \
 	rpi-ad5686.dtbo \
+	rpi-ad5679r.dtbo \
 	rpi-ad5766.dtbo \
 	rpi-ad7124.dtbo \
 	rpi-ad7124-8-all-diff-cs0-int25.dtbo \
@@ -150,6 +152,7 @@ dtbo-$(CONFIG_ARCH_BCM2835) += \
 	rpi-ad5791.dtbo \
 	rpi-backlight.dtbo \
 	rpi-cirrus-wm5102.dtbo \
+	rpi-cn0504.dtbo \
 	rpi-cn0508.dtbo \
 	rpi-cn0511.dtbo \
 	rpi-dac.dtbo \

@@ -11,7 +11,7 @@
  */
 
 /*!
- * @addtogroup __ADI_AD9081__
+ * @addtogroup ADI_AD9081
  * @{
  */
 #ifndef __ADI_AD9081_H__
@@ -26,11 +26,21 @@
 #define AD9081_DAC_CLK_FREQ_HZ_MAX 12600000000ULL
 #define AD9081_ADC_CLK_FREQ_HZ_MIN 1425000000ULL
 #define AD9081_ADC_CLK_FREQ_HZ_MAX 4200000000ULL
+#ifdef AD9209
+#define AD9081_ID 0x9209
+#define AD9081_DAC_CLK_FREQ_HZ_MIN 2850000000ULL
+#define AD9081_DAC_CLK_FREQ_HZ_MAX 12600000000ULL
+#define AD9081_ADC_CLK_FREQ_HZ_MIN 1425000000ULL
+#define AD9081_ADC_CLK_FREQ_HZ_MAX 6300000000ULL
+#endif
 #define AD9081_REF_CLK_FREQ_HZ_MIN 100000000ULL
 #define AD9081_REF_CLK_FREQ_HZ_MAX 2000000000ULL
 
 #define AD9081_JESD_SER_COUNT 8
 #define AD9081_JESD_DESER_COUNT 8
+
+#define AD9081_USE_FLOATING_TYPE 0
+#define AD9081_USE_SPI_BURST_MODE 0
 
 /*!
  * @brief Enumerates Chip Output Resolution
@@ -418,8 +428,8 @@ typedef enum {
 	AD9081_TMODE_NEG_FULL = 0x3, /*!< Negative Full-Scale, 0x8000 */
 	AD9081_TMODE_ALT_CHECKER =
 		0x4, /*!< Alternating Checker Board, 0x5555-0xAAAA */
-	AD9081_TMODE_PN9 = 0x5, /*!< PN9 Sequence */
-	AD9081_TMODE_PN23 = 0x6, /*!< PN23 Sequence */
+	AD9081_TMODE_PN23 = 0x5, /*!< PN23 Sequence */
+	AD9081_TMODE_PN9 = 0x6, /*!< PN9  Sequence */
 	AD9081_TMODE_1_0_TOGG = 0x7, /*!< 1/0 Word Toggle, 0x0000-0xFFFF */
 	AD9081_TMODE_USER_PAT = 0x8, /*!< User Pattern Test Mode */
 	AD9081_TMODE_PN7 = 0x9, /*!< PN7 Sequence */
@@ -509,18 +519,38 @@ typedef struct {
 	adi_ad9081_ser_swing_e swing_setting;
 	adi_ad9081_ser_pre_emp_e pre_emp_setting;
 	adi_ad9081_ser_post_emp_e post_emp_setting;
-} adi_ad9081_indv_ser_settings_t;
+} adi_ad9081_ser_lane_settings_t;
 
 /*!
  * @brief Full JESD Serializer Settings Structure
  */
 typedef struct {
-	adi_ad9081_indv_ser_settings_t indv_ser_lane_settings[8];
-	uint8_t tx_invert_mask;
+	adi_ad9081_ser_lane_settings_t lane_settings[8];
+	uint8_t invert_mask;
+	uint8_t lane_mapping[2][8];
 } adi_ad9081_ser_settings_t;
 
 /*!
- * @brief JESD TX Virtual Converter Select
+ * @brief Full JESD Deserializer Settings Structure
+ */
+typedef struct {
+	uint8_t boost_mask;
+	uint8_t invert_mask;
+	uint8_t ctle_filter[8];
+	uint8_t lane_mapping[2][8];
+} adi_ad9081_des_settings_t;
+
+/*!
+ * @brief Full JESD SERDES Settings Structure
+ */
+typedef struct {
+	adi_ad9081_ser_settings_t ser_settings; /*! Jesd Tx Serializer Settings */
+	adi_ad9081_des_settings_t
+		des_settings; /*! Jesd Rx Deserializer Settings */
+} adi_ad9081_serdes_settings_t;
+
+/*!
+ * @brief JTX Virtual Converter Selection Structure
  */
 typedef struct {
 	uint8_t virtual_converter0_index; /*! Index for JTX virtual converter0  */
@@ -542,19 +572,17 @@ typedef struct {
 } adi_ad9081_jtx_conv_sel_t;
 
 /*!
- * @brief Device Structure
+ * @brief Device Hardware Abstract Layer Structure
  */
 typedef struct {
-	void *user_data;
+	void *user_data; /*!< Pointer to connect customer data related to this device */
+
 	adi_cms_spi_sdo_config_e
 		sdo; /*!< SPI interface 3/4 wire mode configuration */
 	adi_cms_spi_msb_config_e
 		msb; /*!< SPI interface MSB/LSB bit order configuration */
 	adi_cms_spi_addr_inc_e
 		addr_inc; /*!< SPI interface address increment configuration */
-	adi_cms_signal_type_e syncoutb; /*!< Desired type for syncout# signal */
-	adi_cms_signal_coupling_e
-		sysref; /*!< Desired input coupling for sysref signal */
 
 	adi_spi_xfer_t
 		spi_xfer; /*!< Function pointer to hal spi access function */
@@ -587,6 +615,7 @@ typedef struct {
 typedef struct {
 	adi_ad9081_hal_t hal_info;
 	adi_ad9081_info_t dev_info;
+	adi_ad9081_serdes_settings_t serdes_info;
 } adi_ad9081_device_t;
 
 /*============= E X P O R T S ==============*/
@@ -660,6 +689,23 @@ int32_t adi_ad9081_device_deinit(adi_ad9081_device_t *device);
  */
 int32_t adi_ad9081_device_direct_loopback_set(adi_ad9081_device_t *device,
 					      uint8_t mode, uint8_t mapping);
+
+/**
+ * @brief  Calculate FTW word and modulus value
+ *
+ * @param  device    Pointer to the device structure
+ * @param  freq      ADC or DAC freq (need to divide coarse decimation or main interpolation for find ddc or channel)
+ * @param  nco_shift NCO value in Hz
+ * @param  ftw       Calculated FTW value in 48bits
+ * @param  a         Numerator value in 48bits
+ * @param  b         Dominator value in 48bits
+ *
+ * @return API_CMS_ERROR_OK                     API Completed Successfully
+ * @return <0                                   Failed. @see adi_cms_error_e for details.
+ */
+int32_t adi_ad9081_device_calc_nco_ftw(adi_ad9081_device_t *device,
+				       uint64_t freq, int64_t nco_shift,
+				       uint64_t *ftw, uint64_t *a, uint64_t *b);
 
 /**
  * @brief  Perform SPI interface configuration
@@ -832,7 +878,6 @@ int32_t adi_ad9081_device_clk_pll_lock_status_get(adi_ad9081_device_t *device,
  * @param  dac_clk_hz Desired dac clock frequency
  * @param  adc_clk_hz Desired adc clock frequency
  * @param  ref_clk_hz Reference clock frequency
- * @param  pll_en     PLL enable
  *
  * @return API_CMS_ERROR_OK                     API Completed Successfully
  * @return <0                                   Failed. @see adi_cms_error_e for details.
@@ -840,7 +885,7 @@ int32_t adi_ad9081_device_clk_pll_lock_status_get(adi_ad9081_device_t *device,
 int32_t adi_ad9081_device_clk_config_set(adi_ad9081_device_t *device,
 					 uint64_t dac_clk_hz,
 					 uint64_t adc_clk_hz,
-					 uint64_t ref_clk_hz, uint8_t pll_en);
+					 uint64_t ref_clk_hz);
 
 /**
  * @brief  power up/down analog clock receiver
@@ -853,6 +898,18 @@ int32_t adi_ad9081_device_clk_config_set(adi_ad9081_device_t *device,
  * @return <0                                   Failed. @see adi_cms_error_e for details.
  */
 int32_t adi_ad9081_device_aclk_receiver_enable_set(adi_ad9081_device_t *device,
+						   uint8_t enable);
+
+/**
+ * @brief  Set Main Auto Clock Gen Enable
+ *
+ * @param  device  Pointer to the device structure
+ * @param  enable  0x0 ~ 0xf
+ *
+ * @return API_CMS_ERROR_OK                     API Completed Successfully
+ * @return <0                                   Failed. @see adi_cms_error_e for details.
+ */
+int32_t adi_ad9081_device_main_auto_clk_gen_enable(adi_ad9081_device_t *device,
 						   uint8_t enable);
 
 /**
@@ -885,33 +942,6 @@ int32_t adi_ad9081_device_api_revision_get(adi_ad9081_device_t *device,
 					   uint8_t *rev_minor, uint8_t *rev_rc);
 
 /**
- * @brief  Get Firmware revision
- *         This API will be called after adi_ad9081_device_clk_config_set().
- *
- * @param  device    Pointer to the device structure.
- * @param  rev       Pointer to variable to store the firmware revision
- *
- * @return API_CMS_ERROR_OK                     API Completed Successfully
- * @return <0                                   Failed. @see adi_cms_error_e for details.
- */
-int32_t adi_ad9081_device_firmware_revision_get(adi_ad9081_device_t *device,
-						uint32_t *rev);
-
-/**
- * @brief  Get Firmware patch revision
- *         This API will be called after adi_ad9081_device_clk_config_set().
- *
- * @param  device    Pointer to the device structure.
- * @param  rev       Pointer to variable to store the firmware patch revision
- *
- * @return API_CMS_ERROR_OK                     API Completed Successfully
- * @return <0                                   Failed. @see adi_cms_error_e for details.
- */
-int32_t
-adi_ad9081_device_firmware_patch_revision_get(adi_ad9081_device_t *device,
-					      uint32_t *rev);
-
-/**
  * @brief  Get Laminate ID
  *         This API will be called after adi_ad9081_device_clk_config_set().
  *
@@ -935,6 +965,26 @@ int32_t adi_ad9081_device_laminate_id_get(adi_ad9081_device_t *device,
  * @return <0                                   Failed. @see adi_cms_error_e for details.
  */
 int32_t adi_ad9081_device_die_id_get(adi_ad9081_device_t *device, uint8_t *id);
+
+/**
+ * @brief  Do some pre-settings for nco sync.
+ *
+ * @param  device       Pointer to the device structure
+ *
+ * @return API_CMS_ERROR_OK                     API Completed Successfully
+ * @return <0                                   Failed. @see adi_cms_error_e for details.
+ */
+int32_t adi_ad9081_device_nco_sync_pre(adi_ad9081_device_t *device);
+
+/**
+ * @brief  Do some post-settings for nco sync.
+ *
+ * @param  device       Pointer to the device structure
+ *
+ * @return API_CMS_ERROR_OK                     API Completed Successfully
+ * @return <0                                   Failed. @see adi_cms_error_e for details.
+ */
+int32_t adi_ad9081_device_nco_sync_post(adi_ad9081_device_t *device);
 
 /**
  * @brief  Startup Tx
@@ -1768,7 +1818,7 @@ int32_t adi_ad9081_dac_sysref_phase_set(adi_ad9081_device_t *device,
  * @brief  Set SYSREF Sample Type
  *
  * @param  device       Pointer to the device structure
- * @param  sample_type  0 – sampled by reference clock then by high speed clock, 1 – sampled directly by high speed clock
+ * @param  sample_type  0 - sampled by reference clock then by high speed clock, 1 - sampled directly by high speed clock
  *
  * @return API_CMS_ERROR_OK                     API Completed Successfully
  * @return <0                                   Failed. @see adi_cms_error_e for details.
@@ -1812,6 +1862,18 @@ int32_t adi_ad9081_dac_nco_sync_sysref_mode_set(adi_ad9081_device_t *device,
 						uint8_t mode);
 
 /**
+ * @brief  Align NCOs (configure NCO FTW and Phase offset first)
+ *
+ * @param  device        Pointer to the device structure
+ * @param  align_source  0: oneshot, 1: spi, 2: sysref, 3: lmfc rising edge, 4: lmfc falling edge
+ *
+ * @return API_CMS_ERROR_OK                     API Completed Successfully
+ * @return <0                                   Failed. @see adi_cms_error_e for details.
+ */
+int32_t adi_ad9081_dac_nco_sync_set(adi_ad9081_device_t *device,
+				    uint8_t align_source);
+
+/**
  * @brief  Set Device As Master Or Slave to Sync NCO
  *
  * @param  device  Pointer to the device structure
@@ -1851,6 +1913,19 @@ adi_ad9081_dac_nco_master_slave_trigger_source_set(adi_ad9081_device_t *device,
 						   uint8_t source);
 
 /**
+ * @brief  Set Extra LMFC Number in NCO Master-Slave Syc Mode
+ *
+ * @param  device  Pointer to the device structure
+ * @param  num     Extra lmfc number in nco master-slave sync mode
+ *
+ * @return API_CMS_ERROR_OK                     API Completed Successfully
+ * @return <0                                   Failed. @see adi_cms_error_e for details.
+ */
+int32_t
+adi_ad9081_dac_nco_master_slave_extra_lmfc_num_set(adi_ad9081_device_t *device,
+						   uint8_t num);
+
+/**
  * @brief  Trigger Master-Slave NCO Sync
  *
  * @param  device  Pointer to the device structure
@@ -1862,16 +1937,22 @@ int32_t
 adi_ad9081_dac_nco_master_slave_trigger_set(adi_ad9081_device_t *device);
 
 /**
- * @brief  Align NCOs (configure NCO FTW and Phase offset first)
+ * @brief  High level API for Master-Slave NCO Sync
  *
- * @param  device        Pointer to the device structure
- * @param  align_source  0: oneshot, 1: spi, 2: sysref, 3: lmfc rising edge, 4: lmfc falling edge
+ * @param  device         Pointer to the device structure
+ * @param  is_master      1 for master, 0 for slave
+ * @param  trigger_src    0: sysref, 1: lmfc rising edge, 2: lmfc falling edge
+ * @param  gpio_index     0~5 to select GPIO0 ~ GPIO5
+ * @param  extra_lmfc_num Extra lmfc number in nco master-slave sync mode
  *
  * @return API_CMS_ERROR_OK                     API Completed Successfully
  * @return <0                                   Failed. @see adi_cms_error_e for details.
  */
-int32_t adi_ad9081_dac_nco_sync_set(adi_ad9081_device_t *device,
-				    uint8_t align_source);
+int32_t adi_ad9081_dac_nco_master_slave_sync(adi_ad9081_device_t *device,
+					     uint8_t is_master,
+					     uint8_t trigger_src,
+					     uint8_t gpio_index,
+					     uint8_t extra_lmfc_num);
 
 /**
  * @brief  Enable DAC Core SPI Reg Access
@@ -3037,6 +3118,19 @@ int32_t adi_ad9081_adc_pfir_rd_coeff_page_sel_set(
 	uint8_t sel);
 
 /**
+ * @brief  Validat PFIR Coefficients
+ *
+ * @param  device         Pointer to the device structure
+ * @param  ntaps          PFIR taps number (192, 96, 64, 48)
+ * @param  coeffs         Coefficient array
+ *
+ * @return API_CMS_ERROR_OK                     API Completed Successfully
+ * @return <0                                   Failed. @see adi_cms_error_e for details.
+ */
+int32_t adi_ad9081_adc_pfir_coeff_validate(adi_ad9081_device_t *device,
+					   uint8_t ntaps, uint16_t coeffs[192]);
+
+/**
  * @brief  Set PFIR Coefficient
  *
  * @param  device         Pointer to the device structure
@@ -3084,7 +3178,7 @@ adi_ad9081_adc_pfir_coeffs_set(adi_ad9081_device_t *device,
  *                            bit 2: real_cross_i load, bit 3: real_cross_q load
  *                            bit 4: complex load
  * @param  coeffs         Coefficient value array pointer
- * @param  coeffs_num     Coefficient value array(coeffs) size
+ * @param  coeffs_size    Coefficient value array(coeffs) size
  *
  * @return API_CMS_ERROR_OK                     API Completed Successfully
  * @return <0                                   Failed. @see adi_cms_error_e for details.
@@ -3096,7 +3190,7 @@ int32_t adi_ad9081_adc_pfir_config_set(
 	adi_ad9081_adc_pfir_q_mode_e q_mode, adi_ad9081_adc_pfir_gain_e ix_gain,
 	adi_ad9081_adc_pfir_gain_e iy_gain, adi_ad9081_adc_pfir_gain_e qx_gain,
 	adi_ad9081_adc_pfir_gain_e qy_gain, uint8_t coeff_load_sel,
-	uint16_t *coeffs, uint8_t coeffs_num);
+	uint16_t *coeffs, uint8_t coeffs_size);
 
 /**
  * @brief  Set Fine DDC Samples Status Selection
@@ -3471,6 +3565,24 @@ int32_t adi_ad9081_adc_master_trig_enable_set(adi_ad9081_device_t *device,
 int32_t
 adi_ad9081_adc_loopback_master_trig_enable_set(adi_ad9081_device_t *device,
 					       uint8_t enable);
+
+/**
+ * @brief  High level API for Master-Slave NCO Sync
+ *
+ * @param  device         Pointer to the device structure
+ * @param  is_master      1 for master, 0 for slave
+ * @param  trigger_src    0: sysref, 1: lmfc rising edge, 2: lmfc falling edge
+ * @param  gpio_index     0~5 to select GPIO0 ~ GPIO5
+ * @param  extra_lmfc_num Extra lmfc number in nco master-slave sync mode
+ *
+ * @return API_CMS_ERROR_OK                     API Completed Successfully
+ * @return <0                                   Failed. @see adi_cms_error_e for details.
+ */
+int32_t adi_ad9081_adc_nco_master_slave_sync(adi_ad9081_device_t *device,
+					     uint8_t is_master,
+					     uint8_t trigger_src,
+					     uint8_t gpio_index,
+					     uint8_t extra_lmfc_num);
 
 /**
  * @brief  Set Signal Monitor's Clock Enable
@@ -3921,14 +4033,19 @@ int32_t adi_ad9081_jesd_rx_boost_mask_set(adi_ad9081_device_t *device,
  * @brief  Calibrate 204C for JRX
  *         Call after adi_ad9081_device_startup_tx() and JESD TX is transmitting data.
  *
- * @param  device        Pointer to the device structure
- * @param  run_bg_cals   Run background calibration or not
+ * @param  device          Pointer to the device structure
+ * @param  force_cal_reset Force calibration reset, must be 1 for the 1st time calibration after boot
+ * @param  boost_mask      One hot per lane that sets what boost mode to operate in. 1 indicates high boost mode.
+ *                         One usually sets high boost mode if the channels insertion loss is greater than 10 dB.
+ * @param  run_bg_cal      Run background calibration or not
  *
  * @return API_CMS_ERROR_OK                     API Completed Successfully
  * @return <0                                   Failed. @see adi_cms_error_e for details.
  */
 int32_t adi_ad9081_jesd_rx_calibrate_204c(adi_ad9081_device_t *device,
-					  uint8_t run_bg_cals);
+					  uint8_t force_cal_reset,
+					  uint8_t boost_mask,
+					  uint8_t run_bg_cal);
 
 /**
  * @brief  Read jesd jrx link configuration status

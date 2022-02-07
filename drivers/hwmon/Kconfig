@@ -24,8 +24,6 @@ menuconfig HWMON
 
 if HWMON
 
-source "drivers/hwmon/Kconfig.adi"
-
 config HWMON_VID
 	tristate
 
@@ -775,6 +773,17 @@ config SENSORS_LTC2990
 
 	  This driver can also be built as a module. If so, the module will
 	  be called ltc2990.
+
+config SENSORS_LTC2992
+	tristate "Linear Technology LTC2992"
+	depends on I2C
+	help
+	  If you say yes here you get support for Linear Technology LTC2992
+	  I2C System Monitor. The LTC2992 measures current, voltage, and
+	  power of two supplies.
+
+	  This driver can also be built as a module. If so, the module will
+	  be called ltc2992.
 
 config SENSORS_LTC4151
 	tristate "Linear Technology LTC4151"
