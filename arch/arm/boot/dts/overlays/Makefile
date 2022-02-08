@@ -188,6 +188,7 @@ dtbo-$(CONFIG_ARCH_BCM2835) += \
 	rpi-ad7190.dtbo \
 	rpi-ad7293.dtbo \
 	rpi-ad738x.dtbo \
+	rpi-ad7746.dtbo \
 	rpi-ad7768-1.dtbo \
 	rpi-ad74413r.dtbo \
 	rpi-ad9834.dtbo \
@@ -210,6 +211,8 @@ dtbo-$(CONFIG_ARCH_BCM2835) += \
 	rpi-dc1962c.dtbo \
 	rpi-display.dtbo \
 	rpi-ft5406.dtbo \
+	rpi-lm75.dtbo \
+	rpi-ltc2497.dtbo \
 	rpi-ltc6952.dtbo \
 	rpi-poe.dtbo \
 	rpi-poe-plus.dtbo \

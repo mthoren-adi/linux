@@ -1,0 +1,32 @@
+// SPDX-License-Identifier: GPL-2.0
+/dts-v1/;
+/plugin/;
+
+// Device Tree Overlay for AD7746 Capacitance to Digital Converter
+// Tested with CN0552 and PMD-RPI-INTZ adapter board.
+// This part has a single, fixed I2C address of 0x48 (but could be
+// redirected through a switch or translator).
+// Override address to XX by specifying:
+// dtoverlay=rpi-ad7746,addr=0xXX
+
+/ {
+	compatible = "brcm,bcm2835", "brcm,bcm2708", "brcm,bcm2709";
+
+	fragment@0 {
+		target = <&i2c1>;
+		__overlay__ {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "okay";
+			my_ad7746: ad7746@48 {
+				compatible = "adi,ad7746";
+				clock-frequency = <400000>;
+				reg = <0x48>;
+				label = "my_ad7746";
+			};
+		};
+	};
+	__overrides__ {
+		addr = <&my_ad7746>,"reg:0";
+	};
+};
